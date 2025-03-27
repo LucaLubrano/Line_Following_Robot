@@ -84,18 +84,6 @@
 #define RIGHT_MOTOR OCR0A 
 
 /* PID Control Coefficients */
-
-// Current
-// #define PROPORTIONAL_COEFFICIENT 1
-// #define INTEGRAL_COEFFICIENT 0.00
-// #define DERIVATIVE_COEFFICIENT 0
-
-// janky
-// #define PROPORTIONAL_COEFFICIENT 1.2
-// #define INTEGRAL_COEFFICIENT 0.001
-// #define DERIVATIVE_COEFFICIENT 35 
-
-// Slow sometimes goes off course, slight oscillations
 #define PROPORTIONAL_COEFFICIENT 3
 #define INTEGRAL_COEFFICIENT 0
 #define DERIVATIVE_COEFFICIENT 1
@@ -158,7 +146,7 @@ typedef struct {
 
 void timer_init(void);
 void ADC_init(void);
-void PWM_init(void);
+void MOTOR_PWM_init(void);
 void LED_init(void);
 void bot_state_machine(void);
 void motor_state_machine(void);
@@ -204,7 +192,7 @@ int main(void){
   // Initialisation
   timer_init();
   ADC_init();
-  PWM_init();
+  MOTOR_PWM_init();
   LED_init();
 
   // Reset interupts after initialisation
@@ -234,6 +222,8 @@ void sensor_value_average(void){
   sensor_sum = int(line_sensor_array[0]) + int(line_sensor_array[1]) + int(line_sensor_array[2]) + int(line_sensor_array[3]);
   position = int(sensor_average / sensor_sum);
 }
+
+// Check if this is needed
 void PID_init(void){
   sensor_value_average();
   sp = position;
@@ -312,7 +302,7 @@ void LED_init(void){
   SETBIT(DDRB, LED_3);
 }
 
-void PWM_init(void){
+void MOTOR_PWM_init(void){
   // Set pins b7 and d0 to output to expose pwm signal to pin
   SETBIT(DDRB, PB7);
   SETBIT(DDRD, PD0);
