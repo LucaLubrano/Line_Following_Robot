@@ -1,4 +1,4 @@
-// PID controll tutorial
+// PID control reference
 // https://www.teachmemicro.com/implementing-pid-for-a-line-follower-robot/
 
 ////////////////////////////////////////////////
@@ -28,7 +28,7 @@
 /* IR sensors */
 
 // todo: experiment to find out what these values should be 
-#define WHITE_LINE_THRESHOLD 120 
+#define WHITE_LINE_THRESHOLD 120
 #define BLACK_LINE_THRESHOLD 120 
 #define GREEN_LIGHT_LEVEL 120 
 #define RED_LIGHT_LEVEL 120 
@@ -46,14 +46,14 @@
 #define CLEAR_MUX ADMUX &= 0b11100000
 #define SET_MUX(ADC_CHANNEL) CLEAR_MUX; ADMUX |= ADC_CHANNEL
 
-#define IR1_MUX (1<<MUX2)                           // right most
-#define IR2_MUX (1<<MUX2) | (1<<MUX0)               // second right most
-#define IR3_MUX (1<<MUX2) | (1<<MUX1)               // right most center
-#define IR4_MUX (1<<MUX2) | (1<<MUX1) | (1<<MUX0)   // middle right center
-#define IR5_MUX (1<<MUX5) | (1<<MUX1) | (1<<MUX0)   // middle left center
-#define IR6_MUX (1<<MUX5) | (1<<MUX1)               // left most center
-#define IR7_MUX (1<<MUX5) | (1<<MUX0)               // second left most
-#define IR8_MUX (1<<MUX5)                           // left most
+#define IR1_MUX (1<<MUX2)                           // ADC4   // right most
+#define IR2_MUX (1<<MUX2) | (1<<MUX0)               // ADC5   // second right most
+#define IR3_MUX (1<<MUX2) | (1<<MUX1)               // ADC6   // right most center
+#define IR4_MUX (1<<MUX2) | (1<<MUX1) | (1<<MUX0)   // ADC7   // middle right center
+#define IR5_MUX (1<<MUX1) | (1<<MUX0)   // ADC11  // middle left center
+#define IR6_MUX (1<<MUX1)               // ADC10  // left most center
+#define IR7_MUX (1<<MUX0)               // ADC9   // second left most
+#define IR8_MUX                            // ADC8   // left most
 
 /* LEDs */
 
@@ -66,6 +66,9 @@
 #define LED_6 PIN6
 #define LED_7 PIN5
 
+#define TURN_LED_ON(direction_register, led) direction_register |= (1<<led)
+#define TURN_LED_OFF(direction_register, led) direction_register &= ~(1<<led)
+
 /* Motor pins */ 
 
 // check these values through testing
@@ -75,8 +78,37 @@
 #define TURN_SPEED_INCREMENT 2
 #define TRACK_ADJUSTMENT_SPEED 1
 
+#define SPEED_LIMIT (64+64)
+
 #define LEFT_MOTOR OCR0B
 #define RIGHT_MOTOR OCR0A 
+
+/* PID Control Coefficients */
+
+// Current
+// #define PROPORTIONAL_COEFFICIENT 1
+// #define INTEGRAL_COEFFICIENT 0.00
+// #define DERIVATIVE_COEFFICIENT 0
+
+// janky
+// #define PROPORTIONAL_COEFFICIENT 1.2
+// #define INTEGRAL_COEFFICIENT 0.001
+// #define DERIVATIVE_COEFFICIENT 35 
+
+// Slow sometimes goes off course, slight oscillations
+#define PROPORTIONAL_COEFFICIENT 3
+#define INTEGRAL_COEFFICIENT 0
+#define DERIVATIVE_COEFFICIENT 1
+
+
+// P > D
+// D about 1/4 
+// start with P go until it becomes unstable (use 30% of result)
+// then use D not I 
+// use I 
+
+/* Buttons */
+#define PB_PRESSED (PINC & (1<<7))
 
 ////////////////////////////////////////////////
 // Type Definitions
@@ -86,8 +118,6 @@ typedef enum {
   IDLE,
   STRAIGHT,
   TURNING,
-  RIGHT_TURN,
-  LEFT_TURN,
   SLOW_ZONE,
   OBSTACLE,
 } BOT_STATE_TYPE;
@@ -101,14 +131,14 @@ typedef enum {
 } MOTOR_STATE_TYPE;
 
 typedef enum {
-  ADC4,
-  ADC5,
-  ADC6,
-  ADC7,
-  ADC11,
-  ADC10,
-  ADC9,
-  ADC8,
+  ADC4,   // S1
+  ADC5,   // S2
+  ADC6,   // S3
+  ADC7,   // S4
+  ADC11,  // S5
+  ADC10,  // S6
+  ADC9,   // S7
+  ADC8,   // S8
 } IR_STATE_TYPE;
 
 typedef struct {
@@ -133,17 +163,35 @@ void LED_init(void);
 void bot_state_machine(void);
 void motor_state_machine(void);
 void IR_state_machine(void);
+void PID_calc(void);
+void PID_init(void);
+void turn_calc(void);
+void set_motors(int L , int R);
 
 ////////////////////////////////////////////////
 // Global Variable Declaration
 ////////////////////////////////////////////////
 
 volatile BOT_STATE_TYPE bot_state = STRAIGHT; 
-volatile IR_DATA sensor_array = {0,0,0,0,0,0,0,0};
+volatile int sensor_array[8] = {0,0,0,0,0,0,0,0};
+volatile int line_sensor_array[4] = {0,0,0,0};
 volatile MOTOR_STATE_TYPE motor_state = MTR_OFF;
 volatile IR_STATE_TYPE ir_state = ADC4;
 
 volatile int temp_adc = 0;
+
+// PID Variables
+volatile float P, I, D, LP;
+const float Kp = PROPORTIONAL_COEFFICIENT;
+const float Ki = INTEGRAL_COEFFICIENT;
+const float Kd = DERIVATIVE_COEFFICIENT;
+const int base_speed = 64;
+volatile int r_mtr_speed, l_mtr_speed;
+volatile float error, correction, sp;
+volatile int position, sensor_average, sensor_sum;
+
+// State machine
+static bool bot_turning = false;
 
 ////////////////////////////////////////////////
 // Main
@@ -163,84 +211,69 @@ int main(void){
   USBCON=0;
   sei();
 
+  PID_init();
   // Robot state machine
-  bot_state_machine();
+  // bot_state_machine();
+  while(1){
+    PID_calc();
+    turn_calc();
+  }
 }
 
 ////////////////////////////////////////////////
 // Control System and State Machines
 ////////////////////////////////////////////////
 
-void bot_state_machine(void){
-  while (1){
-    switch (bot_state){
-      case IDLE:
-      if (1) { // PB pressed 
-        bot_state = STRAIGHT;
-      }
-        break;
+// todo: make the pwm init run when a button is pressed
+void sensor_value_average(void){
+  sensor_average = 0;
+  sensor_sum = 0;
+  // todo: (?) make a for loop?
+  sensor_average = (line_sensor_array[0] * -2 * 1000) + (line_sensor_array[1] * -1 * 1000) + (line_sensor_array[2] * 1 * 1000) + (line_sensor_array[3] * 2 * 1000);
+  // sensor_average = (line_sensor_array[0] * -2) + (line_sensor_array[1] * -1) + (line_sensor_array[2] * 1) + (line_sensor_array[3] * 2);
+  sensor_sum = int(line_sensor_array[0]) + int(line_sensor_array[1]) + int(line_sensor_array[2]) + int(line_sensor_array[3]);
+  position = int(sensor_average / sensor_sum);
+}
+void PID_init(void){
+  sensor_value_average();
+  sp = position;
+}
 
-      case STRAIGHT:
-        RIGHT_MOTOR = STRAIGHT_SPEED;
-        LEFT_MOTOR = STRAIGHT_SPEED;
+void PID_calc(void){
+  sensor_value_average();
+  // error = position - sp;
+  error = position ;
+  P = error;
+  I += P;
+  D = P - LP;
+  LP = P;
+  correction = int(Kp*P + Ki*I + Kd*D);
 
-        // Check that a turn indicator hasnt been detected
-        if (LEFT_SENSORS_DETECT_WHITE){
-          bot_state = RIGHT_TURN;
-          RIGHT_MOTOR = TURN_SPEED;
-          LEFT_MOTOR = TURN_SPEED;
-        } else if (RIGHT_SENSORS_DETECT_WHITE){
-          bot_state = LEFT_TURN;
-          RIGHT_MOTOR = TURN_SPEED;
-          LEFT_MOTOR = TURN_SPEED;
-        }
+}
 
-        // Check we are still on the track
-        if (LEFT_LINE_OFF_COURSE) {
-          RIGHT_MOTOR += TRACK_ADJUSTMENT_SPEED;
-        } else if (RIGHT_LINE_OFF_COURSE) {
+void turn_calc(void){
+  r_mtr_speed = base_speed + correction;
+  l_mtr_speed = base_speed - correction;
 
-        }
-
-        break;
-
-      case RIGHT_TURN:
-        
-        // Check that we are matching the turn
-        if RIGHT_LINE_OFF_COURSE {
-          LEFT_MOTOR += TURN_SPEED_INCREMENT;
-        }
-        // Check that the turn hasnt ended
-        if LEFT_SENSORS_DETECT_WHITE{
-          bot_state = STRAIGHT;
-          // change motor speed?
-        }
-
-        break;
-
-      case LEFT_TURN:
-        // Check that we are matching the turn
-        if LEFT_LINE_OFF_COURSE {
-          RIGHT_MOTOR += TURN_SPEED_INCREMENT;
-        }
-        // Check that the turn hasnt ended
-        if RIGHT_SENSORS_DETECT_WHITE{
-          bot_state = STRAIGHT;
-          // change motor speed?
-        }
-
-        break;  
-
-      case SLOW_ZONE:
-        break;
-
-      case OBSTACLE:
-        break;
-        
-      default:
-        break;
-    }
+if (r_mtr_speed > SPEED_LIMIT){
+    r_mtr_speed = base_speed;
+  } else if (r_mtr_speed < 0) {
+    r_mtr_speed = 0;
   }
+
+  if (l_mtr_speed > SPEED_LIMIT) {
+    l_mtr_speed = base_speed;
+  } else if (l_mtr_speed < 0){
+    l_mtr_speed = 0;
+  }
+  set_motors(l_mtr_speed, r_mtr_speed);
+}
+
+void set_motors(int L , int R){
+  
+  RIGHT_MOTOR = R;
+  LEFT_MOTOR = L;
+
 }
 
 ////////////////////////////////////////////////
@@ -264,12 +297,11 @@ void ADC_init(void){
   ADCSRA |= (1<<ADEN) | (1<<ADIE) | (1<<ADPS2) | (1<<ADPS1) | (1<<ADPS0);
   ADCSRB |= (1<<ADHSM);
 
-  ADMUX |= (1<<MUX0);
+  // set first conversion
+  SET_MUX(IR1_MUX);
 
   // Start ADC
-  ADCSRA |= (1<<ADSC);
-
-  
+  ADCSRA |= (1<<ADSC);  
 }
 
 void LED_init(void){
@@ -281,22 +313,21 @@ void LED_init(void){
 }
 
 void PWM_init(void){
-  // Set timers to correct configuration
-  // todo: Set this up to be more readable ie why we set the bits how we do
-  TCCR0A |= (1<< COM0A1) | (1<<COM0B1) | (1<<WGM01) | (1<< WGM00);
-  TCCR0B |= (1<<CS02);
-  
   // Set pins b7 and d0 to output to expose pwm signal to pin
   SETBIT(DDRB, PB7);
   SETBIT(DDRD, PD0);
+  
+  // todo: Set this up to be more readable ie why we set the bits how we do
+  TCCR0A |= (1<< COM0A1) | (1<<COM0B1) | (1<<WGM01) | (1<<WGM00);
+  TCCR0B |= (1<<CS02);
 
   // set pits b0 and e6 to outputs for phase control
-  SETBIT(DDRB, PB0);
-  SETBIT(DDRE, PE6);
+  // SETBIT(DDRB, PB0);
+  // SETBIT(DDRE, PE6);
 
-  // set output direction values
-  SETBIT(PORTB, PB0);
-  CLRBIT(PORTE, PE6);
+  // // set output direction values
+  // SETBIT(PORTB, PB0);
+  // CLRBIT(PORTE, PE6);
 }
 
 // switch 1
@@ -314,55 +345,71 @@ void button_init(void){
 ////////////////////////////////////////////////
 
 // ADC conversion interupt
+// todo: MUX 5 is in ADCSRB register CHECK
 ISR(ADC_vect){
   // set variable based on conversion being completed
   temp_adc = ADCH;
+  if (temp_adc < WHITE_LINE_THRESHOLD) {
+    temp_adc = 1;
+  } else{
+    temp_adc = 0;
+  }
   switch (ir_state){ 
     case ADC4: // Rightmost sensor
-    sensor_array.RIGHT_IR2 = temp_adc;
+    sensor_array[0] = temp_adc;  
     SET_MUX(IR2_MUX);
+    ADCSRB &= ~(1<<MUX5);
     ir_state = ADC5;
     break;
     
     case ADC5: // Second Rightmost sensor
-    sensor_array.RIGHT_IR1 = temp_adc;
+    sensor_array[1] = temp_adc;
     SET_MUX(IR3_MUX);
     ir_state = ADC6;
     break;
     
     case ADC6: // Rightmost center sensor
-    sensor_array.CNTR_IR4 = temp_adc;
+    sensor_array[2] = temp_adc;
+    line_sensor_array[3] = temp_adc;
     SET_MUX(IR4_MUX);
     ir_state = ADC7;
     break;
     
     case ADC7: // Second Rightmost center sensor
-    sensor_array.CNTR_IR3 = temp_adc;
+    sensor_array[3] = temp_adc;
+    line_sensor_array[2] = temp_adc;
     SET_MUX(IR5_MUX);
+    ADCSRB |= (1<<MUX5);
     ir_state = ADC11;
     break;
     
     case ADC11: // Second Leftmost center sensor
-    sensor_array.CNTR_IR2 = temp_adc;
+    sensor_array[4] = temp_adc;
+    line_sensor_array[1] = temp_adc;
     SET_MUX(IR6_MUX);
+    ADCSRB |= (1<<MUX5);
     ir_state = ADC10;
     break;
     
     case ADC10: // Leftmost center sensor
-    sensor_array.CNTR_IR1 = temp_adc;
+    sensor_array[5] = temp_adc;
+    line_sensor_array[0] = temp_adc;
     SET_MUX(IR7_MUX);
+    ADCSRB |= (1<<MUX5);
     ir_state = ADC9;
     break;
     
     case ADC9: // second Leftmost sensor
-    sensor_array.LEFT_IR2 = temp_adc;
-    SET_MUX(IR8_MUX);
+    sensor_array[6] = temp_adc;
+    CLEAR_MUX;
+    ADCSRB |= (1<<MUX5);
     ir_state = ADC8;
     break;
     
     case ADC8: // Leftmost sensor
-    sensor_array.LEFT_IR1 = temp_adc;
+    sensor_array[7] = temp_adc;
     SET_MUX(IR1_MUX);
+    ADCSRB &= ~(1<<MUX5);
     ir_state = ADC4;
     break;
     
@@ -377,28 +424,53 @@ ISR(ADC_vect){
 // 5ms periodic timer interupt
 
 // ISR(TIMER1_COMPA_vect){
-//   switch (motor_state){
-//     case MTR_OFF:
-//       if (PINC & (1<<7)){
-//         motor_state = MTR_STRAIGHT;
+//   switch(bot_state){
+//     case IDLE:
+//       if PB_PRESSED{
+//         TURN_LED_ON(DDRE, LED_0);
+//         bot_state = STRAIGHT;
 //       }
 //     break;
 
-//     case MTR_STRAIGHT:
+//     case STRAIGHT:
+//       if (LEFT_SENSORS_DETECT_WHITE || RIGHT_SENSORS_DETECT_WHITE){
+//         TURN_LED_OFF(DDRE, LED_0);
+//         TURN_LED_ON(DDRB, LED_1);
+//         bot_state = TURNING;    
+//       }
 
+//       if (DETECT_RED){
+//         bot_state = SLOW_ZONE;    
+//       }
 //     break;
 
-//     case MTR_RIGHT_TURN:
+//     case TURNING:
+//       if (LEFT_SENSORS_DETECT_WHITE || RIGHT_SENSORS_DETECT_WHITE){
+//         TURN_LED_ON(DDRE, LED_0);
+//         TURN_LED_OFF(DDRB, LED_1);
+//         bot_state = STRAIGHT;    
+//       }
+
+//       bot_state = ;
+//       if (DETECT_RED){
+//         bot_state = SLOW_ZONE;    
+//       }
 //     break;
 
-//     case MTR_LEFT_TURN:
-
+//     case SLOW_ZONE:
+//       if(DETECT_GREEN){
+//         bot_state = TURNING;
+//       }
+//       bot_state = STRAIGHT;
 //     break;
 
-//     case MTR_SLOW_ZONE:
+//     case OBSTACLE:
+    
+//     bot_state = STRAIGHT;
 //     break;
 
 //     default:
+//     bot_state = IDLE;
 //     break;
 //   }
 // }
