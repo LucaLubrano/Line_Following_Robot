@@ -88,8 +88,8 @@ volatile int Hsensor_average, Hsensor_sum, Vsensor_average, Vsensor_sum;
 // index 2 - BOTTOM LEFT IR SENSOR
 // index 3 - BOTTOM RIGHT IR SENSOR
 volatile int sensor_array[4] = {0,0,0,0};
-volatile int Hsensor_array[4] = {0,0};
-volatile int Vsensor_array[4] = {0,0};
+volatile int Hsensor_array[2] = {0,0};
+volatile int Vsensor_array[2] = {0,0};
 
 ////////////////////////////////////////////////
 // Main
