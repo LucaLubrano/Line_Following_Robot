@@ -7,7 +7,6 @@
 #define CLRBIT(x,y) ((x) &= ~BIT(y))
 #define TGLBIT(x,y) x ^= BIT(y)
 
-
 ////////////////////////////////////////////////
 // Configurations
 ////////////////////////////////////////////////
@@ -15,15 +14,15 @@
 /* IR sensors */
 
 // todo: experiment to find out what these values should be 
-#define IR_SENSING_THRESHOLD 180
+#define IR_SENSING_THRESHOLD 0
 
 #define CLEAR_MUX ADMUX &= 0b11100000
 #define SET_MUX(ADC_CHANNEL) CLEAR_MUX; ADMUX |= ADC_CHANNEL
 
-#define IR1_MUX (1<<MUX2)                           // ADC4   // right most
-#define IR2_MUX (1<<MUX2) | (1<<MUX0)               // ADC5   // second right most
-#define IR3_MUX (1<<MUX2) | (1<<MUX1)               // ADC6   // right most center
-#define IR4_MUX (1<<MUX2) | (1<<MUX1) | (1<<MUX0)   // ADC7   // middle right center
+#define IR1_MUX 0                                   // ADC4   // right most
+#define IR2_MUX (1<<MUX0)                           // ADC5   // second right most
+#define IR3_MUX (1<<MUX2)                           // ADC6   // right most center
+#define IR4_MUX (1<<MUX2) | (1<<MUX0)               // ADC7   // middle right center
 
 /* PID Control Coefficients */
 #define PROPORTIONAL_COEFFICIENT 1
@@ -55,6 +54,8 @@
 #define IR2_MUX (1<<MUX2) | (1<<MUX0)               // ADC5   // second right most
 #define IR3_MUX (1<<MUX2) | (1<<MUX1)               // ADC6   // right most center
 #define IR4_MUX (1<<MUX2) | (1<<MUX1) | (1<<MUX0)   // ADC7   // middle right center
+
+#define ANGLE_CONV (90.0/255.0)
 
 ////////////////////////////////////////////////
 // Type Definitions
@@ -92,7 +93,12 @@ volatile float Herror, Hcorrection, Verror, Vcorrection;
 volatile int Hsensor_average, Hsensor_sum, Vsensor_average, Vsensor_sum;
 volatile int current_angle_H = 90;
 volatile int current_angle_V = 90;
+volatile int demand_angle_V, demand_angle_H;
 volatile int temp_adc;
+
+volatile int H_motor_angle, V_motor_angle;
+volatile int baseangle = 90;
+
 
 // Sensor Array 
 // index 0 - TOP LEFT IR SENSOR
@@ -141,18 +147,21 @@ void PID_calc(void){
   // index 1 - TOP RIGHT IR SENSOR
   // index 2 - BOTTOM LEFT IR SENSOR
   // index 3 - BOTTOM RIGHT IR SENSOR
-  Hsensor_array[0] = sensor_array[0] + sensor_array[2]; // LEFT (-)
-  Hsensor_array[1] = sensor_array[1] + sensor_array[3]; // RIGHT (+)
+  Hsensor_array[0] = sensor_array[0] + sensor_array[1]; // LEFT (-)
+  Hsensor_array[1] = sensor_array[2] + sensor_array[3]; // RIGHT (+)
+  // Hsensor_array[0] = sensor_array[3]; // L M 
+  // Hsensor_array[1] = sensor_array[0]; // R M
   Vsensor_array[0] = sensor_array[2] + sensor_array[3]; // DOWN (-)
   Vsensor_array[1] = sensor_array[2] + sensor_array[3]; // UP (+)
 
   /* Horizontal Correction Calculations */
   Hsensor_average = 0;
   Hsensor_sum = 0;
-  Hsensor_average = (Hsensor_array[0] * -1 * 1000) + (Hsensor_array[1] * 1 * 1000);
+  // Hsensor_average = (Hsensor_array[0] * -1 * 1000) + (Hsensor_array[1] * 1 * 1000);
+  Hsensor_average = (Hsensor_array[0] * -1 ) + (Hsensor_array[1] * 1 );
   Hsensor_sum = Hsensor_array[0] + Hsensor_array[1];
-  Herror = int(Hsensor_average / Hsensor_sum);
-  HP = Herror;
+  Herror = Hsensor_average / Hsensor_sum;
+  HP = ANGLE_CONV * Herror;
   HI += HP;
   HD = HP - HLP;
   HLP = HP;
@@ -162,10 +171,11 @@ void PID_calc(void){
   /* Vertical Correction Calculations */
   Vsensor_average = 0;
   Vsensor_sum = 0;
-  Vsensor_average = (Vsensor_array[0] * -1 * 1000) + (Vsensor_array[1] * 1 * 1000);
+
+  Vsensor_average = (Vsensor_array[0] * -1) + (Vsensor_array[1] * 1 );
   Vsensor_sum = Vsensor_array[0] + Vsensor_array[1];
-  Verror = int(Vsensor_average / Vsensor_sum);
-  VP = Verror;  
+  Verror = Vsensor_average / Vsensor_sum;
+  VP = ANGLE_CONV * Verror;  
   VI += VP;
   VD = VP - VLP;
   VLP = VP;
@@ -174,26 +184,72 @@ void PID_calc(void){
 
 void turn_calc(void){
 
-  current_angle_H += Hcorrection;
-  current_angle_V += Vcorrection;
+  // H_motor_angle = baseangle + Hcorrection;
+  // V_motor_angle = baseangle + Vcorrection;
 
-  if (current_angle_H > UPPER_ANGLE_LIMIT){
-    current_angle_H = 180;
-  } else if (current_angle_H < LOWER_ANGLE_LIMIT) {
-    current_angle_H = 0;
+  // if (H_motor_angle > UPPER_ANGLE_LIMIT){
+  //   H_motor_angle = 180;
+  // } else if (H_motor_angle < LOWER_ANGLE_LIMIT) {
+  //   H_motor_angle = 0;
+  // }
+
+  // if (V_motor_angle > UPPER_ANGLE_LIMIT){
+  //   V_motor_angle = 180;
+  // } else if (V_motor_angle < LOWER_ANGLE_LIMIT) {
+  //   V_motor_angle = 0;
+  // }
+  // set_servos(H_motor_angle, V_motor_angle);
+
+////////////////////////////////////////////////////////////////////////////
+
+  // previous_angle_H = current_angle_H;
+  // previous_angle_V = current_angle_V;
+
+  demand_angle_H = current_angle_H + Hcorrection;
+  demand_angle_V = current_angle_V + Vcorrection;
+
+  // current_angle_H += Hcorrection;
+  // current_angle_V += Vcorrection;
+
+  // Change angle 1 step at a time until you reach current angle
+
+  // check if new angle at upper angle limit - if so set to limit
+  // check if new angle at lower limit
+
+  if (demand_angle_H > UPPER_ANGLE_LIMIT){
+    demand_angle_H = 180;
+  } else if (demand_angle_H < LOWER_ANGLE_LIMIT) {
+    demand_angle_H = 0;
+  }
+  if (demand_angle_V > UPPER_ANGLE_LIMIT){
+    demand_angle_V = 180;
+  } else if (demand_angle_V < LOWER_ANGLE_LIMIT) {
+    demand_angle_V = 0;
   }
 
-  if (current_angle_V > UPPER_ANGLE_LIMIT){
-    current_angle_V = 180;
-  } else if (current_angle_V < LOWER_ANGLE_LIMIT) {
-    current_angle_V = 0;
+  // set servo 1 angle at a time until you reach new angle
+  // number of increments - abs( current - previous )
+  while ( current_angle_H < demand_angle_H ){
+    inc_servo_H();
   }
-  set_servos(current_angle_H, current_angle_V);
+  while ( current_angle_V < demand_angle_V ){
+    inc_servo_V();
+  }
 }
 
 void set_servos(int H , int V){
   SET_SERVO_H(H);
   SET_SERVO_V(V);
+}
+
+void inc_servo_H(void){
+  current_angle_H++;
+  OCR1A = ((0.5/20.0) + ((current_angle_H/180.0) * (2))/20.0) * ICR1;
+}
+
+void inc_servo_V(void){
+  current_angle_V++;
+  OCR1B = ((0.5/20.0) + ((current_angle_V/180.0) * (2))/20.0) * ICR1;
 }
 
 ////////////////////////////////////////////////
@@ -235,8 +291,8 @@ ISR(ADC_vect){
   // set variable based on conversion being completed
   temp_adc = ADCH;
   // if (temp_adc > IR_SENSING_THRESHOLD) {
-  if (temp_adc > IR_SENSING_THRESHOLD) {
-    temp_adc = 1;
+  if (temp_adc >= IR_SENSING_THRESHOLD) {
+    temp_adc -= IR_SENSING_THRESHOLD;
   } else{
     temp_adc = 0;
   }

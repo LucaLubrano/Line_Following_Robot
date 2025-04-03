@@ -84,9 +84,9 @@
 #define RIGHT_MOTOR OCR0A 
 
 /* PID Control Coefficients */
-#define PROPORTIONAL_COEFFICIENT 3
-#define INTEGRAL_COEFFICIENT 0
-#define DERIVATIVE_COEFFICIENT 1
+#define PROPORTIONAL_COEFFICIENT 22
+#define INTEGRAL_COEFFICIENT 0.0001
+#define DERIVATIVE_COEFFICIENT 6
 
 
 // P > D
@@ -173,13 +173,13 @@ volatile float P, I, D, LP;
 const float Kp = PROPORTIONAL_COEFFICIENT;
 const float Ki = INTEGRAL_COEFFICIENT;
 const float Kd = DERIVATIVE_COEFFICIENT;
-const int base_speed = 64;
+const int maxspeed = 128;
+const int basespeed = 128;
 volatile int r_mtr_speed, l_mtr_speed;
 volatile float error, correction, sp;
 volatile int position, sensor_average, sensor_sum;
-
-// State machine
-static bool bot_turning = false;
+volatile int currentspeedR = 64;
+volatile int currentspeedL = 64;
 
 ////////////////////////////////////////////////
 // Main
@@ -199,7 +199,6 @@ int main(void){
   USBCON=0;
   sei();
 
-  PID_init();
   // Robot state machine
   // bot_state_machine();
   while(1){
@@ -217,16 +216,10 @@ void sensor_value_average(void){
   sensor_average = 0;
   sensor_sum = 0;
   // todo: (?) make a for loop?
-  sensor_average = (line_sensor_array[0] * -2 * 1000) + (line_sensor_array[1] * -1 * 1000) + (line_sensor_array[2] * 1 * 1000) + (line_sensor_array[3] * 2 * 1000);
+  sensor_average = (line_sensor_array[0] * -2 * 1000.0) + (line_sensor_array[1] * -1 * 1000) + (line_sensor_array[2] * 1 * 1000) + (line_sensor_array[3] * 2 * 1000);
   // sensor_average = (line_sensor_array[0] * -2) + (line_sensor_array[1] * -1) + (line_sensor_array[2] * 1) + (line_sensor_array[3] * 2);
   sensor_sum = int(line_sensor_array[0]) + int(line_sensor_array[1]) + int(line_sensor_array[2]) + int(line_sensor_array[3]);
-  position = int(sensor_average / sensor_sum);
-}
-
-// Check if this is needed
-void PID_init(void){
-  sensor_value_average();
-  sp = position;
+  position = sensor_average / sensor_sum;
 }
 
 void PID_calc(void){
@@ -242,21 +235,42 @@ void PID_calc(void){
 }
 
 void turn_calc(void){
-  r_mtr_speed = base_speed + correction;
-  l_mtr_speed = base_speed - correction;
 
-if (r_mtr_speed > SPEED_LIMIT){
-    r_mtr_speed = base_speed;
-  } else if (r_mtr_speed < 0) {
-    r_mtr_speed = 0;
+//   r_mtr_speed = basespeed + correction;
+//   l_mtr_speed = basespeed - correction;
+
+// if (r_mtr_speed > maxspeed){
+//     r_mtr_speed = maxspeed;
+//   } else if (r_mtr_speed < 0) {
+//     r_mtr_speed = 0;
+//   }
+
+//   if (l_mtr_speed > maxspeed) {
+//     l_mtr_speed = maxspeed;
+//   } else if (l_mtr_speed < 0){
+//     l_mtr_speed = 0;
+//   }
+//   set_motors(l_mtr_speed, r_mtr_speed);
+
+  currentspeedR += correction;
+  currentspeedL -= correction;
+
+if (currentspeedR > maxspeed){
+    currentspeedR = maxspeed;
+  } else if (currentspeedR < 0) {
+    currentspeedR = 0;
   }
 
-  if (l_mtr_speed > SPEED_LIMIT) {
-    l_mtr_speed = base_speed;
-  } else if (l_mtr_speed < 0){
-    l_mtr_speed = 0;
+  if (currentspeedL > maxspeed) {
+    currentspeedL = maxspeed;
+  } else if (currentspeedL < 0){
+    currentspeedL = 0;
   }
-  set_motors(l_mtr_speed, r_mtr_speed);
+
+  if (correction != 0){ 
+    set_motors(currentspeedL, currentspeedR);
+  }
+  
 }
 
 void set_motors(int L , int R){
@@ -335,9 +349,8 @@ void button_init(void){
 ////////////////////////////////////////////////
 
 // ADC conversion interupt
-// todo: MUX 5 is in ADCSRB register CHECK
 ISR(ADC_vect){
-  // set variable based on conversion being completed
+
   temp_adc = ADCH;
   if (temp_adc < WHITE_LINE_THRESHOLD) {
     temp_adc = 1;
