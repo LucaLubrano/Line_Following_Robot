@@ -11,6 +11,7 @@ void setup() {
   sei();
 
   set_servos(90,90);
+  delay(500);
   
 }
 
@@ -20,17 +21,23 @@ void loop() {
 
 }
 
+
 void go_diagonal(void){
-  for (int i = 0; i < 181 ; i++){
-    delay(20);
-    set_servos(i,i);
-  }
+  // for (int i = 90; i < 180 ; i++){
+  //   delay(20);
+  //   set_servos(i,i);
+  // }
   delay(20);
-  for (int i = 180; i >= 0 ; i--){
+  for (int i = ; i >= 0 ; i--){
     delay(20);
     set_servos(i,i);
   }
-  // delay(50);
+  delay(50);
+  for (int i = 0; i <= 90 ; i++){
+    delay(20);
+    set_servos(i,i);
+  }
+  delay(50);
   // set_servos(90,90);
 }
 

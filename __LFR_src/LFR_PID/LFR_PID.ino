@@ -156,6 +156,8 @@ void PID_init(void);
 void turn_calc(void);
 void set_motors(int L , int R);
 
+
+
 ////////////////////////////////////////////////
 // Global Variable Declaration
 ////////////////////////////////////////////////
@@ -201,10 +203,11 @@ int main(void){
 
   // Robot state machine
   // bot_state_machine();
-  while(1){
-    PID_calc();
-    turn_calc();
-  }
+  // while(1){
+  //   PID_calc();
+  //   turn_calc();
+  // }
+  set_motors(80,80);
 }
 
 ////////////////////////////////////////////////
@@ -404,6 +407,7 @@ ISR(ADC_vect){
     
     case ADC9: // second Leftmost sensor
     sensor_array[6] = temp_adc;
+    // line_sensor_array[3] = temp_adc;
     CLEAR_MUX;
     ADCSRB |= (1<<MUX5);
     ir_state = ADC8;
@@ -411,6 +415,7 @@ ISR(ADC_vect){
     
     case ADC8: // Leftmost sensor
     sensor_array[7] = temp_adc;
+    // line_sensor_array[2] = temp_adc;
     SET_MUX(IR1_MUX);
     ADCSRB &= ~(1<<MUX5);
     ir_state = ADC4;
