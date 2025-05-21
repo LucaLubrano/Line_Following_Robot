@@ -1,0 +1,36 @@
+interconnection led pinout
+spark side - PB6
+spark side - PB5
+teensy side - PB0
+teensy side - PB1
+
+
+Line Sensor Array
+S1 PF4 ADC4
+S2 PF5 ADC5
+S3 PF6 ADC6
+S4 PF7 ADC7
+S5 PB4 ADC11 
+S6 PD7 ADC10
+S7 PD6 ADC9
+S8 PD4 ADC8
+
+
+
+Working
+--------------------------------
+- motors work 
+- ir sensor teensy works
+- servos work
+--------------------------------
+
+
+Not Working
+--------------------------------
+- Line tracking board
+- interconnection
+- LEDs
+- State machine
+- color detecting
+- object pushing detection
+--------------------------------

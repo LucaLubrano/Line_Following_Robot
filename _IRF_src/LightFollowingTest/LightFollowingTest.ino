@@ -14,7 +14,7 @@
 /* IR sensors */
 
 // todo: experiment to find out what these values should be 
-#define IR_SENSING_THRESHOLD 0
+#define IR_SENSING_THRESHOLD 10
 
 #define CLEAR_MUX ADMUX &= 0b11100000
 #define SET_MUX(ADC_CHANNEL) CLEAR_MUX; ADMUX |= ADC_CHANNEL
@@ -50,11 +50,6 @@
 #define LOWER_ANGLE_LIMIT ((0.5/20.0) + ((0/180.0) * (2))/20.0) * ICR1
 #define RESET_ANGLE ((0.5/20.0) + ((90/180.0) * (2))/20.0) * ICR1
 
-#define IR1_MUX (1<<MUX2)                           // ADC4   // right most
-#define IR2_MUX (1<<MUX2) | (1<<MUX0)               // ADC5   // second right most
-#define IR3_MUX (1<<MUX2) | (1<<MUX1)               // ADC6   // right most center
-#define IR4_MUX (1<<MUX2) | (1<<MUX1) | (1<<MUX0)   // ADC7   // middle right center
-
 #define ANGLE_CONV (90.0/255.0)
 
 ////////////////////////////////////////////////
@@ -62,10 +57,10 @@
 ////////////////////////////////////////////////
 
 typedef enum {
-  ADC4,   // S1
-  ADC5,   // S2
-  ADC6,   // S3
-  ADC7,   // S4
+  ADC0,   // S1
+  ADC1,   // S2
+  ADC4,   // S3
+  ADC5,   // S4
 } IR_STATE_TYPE;
 
 typedef enum {
@@ -132,7 +127,6 @@ void setup(){
   ADC_init();
   SERVO_PWM_init();
   
-  USBCON=0;
   sei();
   Serial.begin(9600);
   OCR1A = ((0.5/20.0) + ((90/180.0) * (2))/20.0) * ICR1;
@@ -142,20 +136,33 @@ void setup(){
 void loop(){
   PID_calc();
   turn_calc();
-  Serial.println("==================");
-  // // Serial.println(sensor_array[0]);
-  // // Serial.println(sensor_array[1]);
-  // // Serial.println(sensor_array[2]);
-  // // Serial.println(sensor_array[3]);
-  Serial.println(current_angle_H);
-  // Serial.println(Hsensor_array[0]);
-  // Serial.println(Hsensor_array[1]);
-  Serial.println(current_angle_V);
+  // Serial.println("Sensor Readings");
+  // Serial.println("---------------");
+  // Serial.print("Top Sensor ==> ");
+  // Serial.println(sensor_array[0]);
+  // Serial.print("Bottom Sensor ==> ");
+  // Serial.println(sensor_array[1]);
+  // Serial.print("Right Sensor ==> ");
+  // Serial.println(sensor_array[2]);
+  // Serial.print("Left Sensor ==> ");
+  // Serial.println(sensor_array[3]);
+  // Serial.println("---------------");
+  // Serial.println("Logic Control");
+  // Serial.println("---------------");
+  // Serial.print("Horizontal Correction Angle ==> ");
+  // Serial.println(Hcorrection);
+  // Serial.print("Horizontal Error (right +ve) ==> ");
+  // Serial.println(Herror);
+  // Serial.print("Current Horizontal Angle ==> ");
+  // Serial.println(current_angle_H);
+  // Serial.print("Vertical Correction Angle ==> ");
+  // Serial.println(Vcorrection);
+  // Serial.print("Vertical Error (up +ve) ==> ");
   // Serial.println(Verror);
-  // Serial.println(Vsensor_array[0]);
-  // Serial.println(Vsensor_array[1]);
-  // Serial.println(demand_angle_V);
-  delay(20);
+  // Serial.print("Current Vertical Angle ==> ");
+  // Serial.println(current_angle_V);
+  // Serial.println("---------------");
+  delay(30);
 }
 
 ////////////////////////////////////////////////
@@ -165,22 +172,15 @@ void loop(){
 void PID_calc(void){
   /* Sensor Conversions */
   // Sensor Array
-  // index 0 - TOP LEFT IR SENSOR
-  // index 1 - TOP RIGHT IR SENSOR
-  // index 2 - BOTTOM LEFT IR SENSOR
-  // index 3 - BOTTOM RIGHT IR SENSOR
-  // sensor TL - 3
-  // sensor TR - 0
-  // sensor BL - buggy 2
-  // sensory BR - 1
-  // Hsensor_array[0] = sensor_array[0] + sensor_array[2]; // LEFT (-)
-  // Hsensor_array[1] = sensor_array[1] + sensor_array[3]; // RIGHT (+)
-  // Vsensor_array[0] = sensor_array[2] + sensor_array[3]; // DOWN (-)
-  // Vsensor_array[1] = sensor_array[1] + sensor_array[2]; // UP (+)
-  Hsensor_array[0] = sensor_array[3] + sensor_array[2]; // LEFT (-)
-  Hsensor_array[1] = sensor_array[0] + sensor_array[1]; // RIGHT (+)
-  Vsensor_array[0] = sensor_array[2] + sensor_array[1]; // DOWN (-)
-  Vsensor_array[1] = sensor_array[3] + sensor_array[0]; // UP (+)
+  // Hsensor_array[0] = sensor_array[3]; // LEFT (-)
+  // Hsensor_array[1] = sensor_array[2]; // RIGHT (+)
+  // Vsensor_array[0] = sensor_array[1]; // DOWN (-)
+  // Vsensor_array[1] = sensor_array[0]; // UP (+)
+
+  Hsensor_array[1] = sensor_array[3]; // LEFT (-)
+  Hsensor_array[0] = sensor_array[2]; // RIGHT (+)
+  Vsensor_array[0] = sensor_array[1]; // DOWN (-)
+  Vsensor_array[1] = sensor_array[0]; // UP (+)
 
   /* Horizontal Correction Calculations */
   Herror = ANGLE_CONV * (Hsensor_array[0]-Hsensor_array[1])/2;
@@ -196,7 +196,7 @@ void PID_calc(void){
 
   /* Vertical Correction Calculations */
   Verror = ANGLE_CONV * (Vsensor_array[1]-Vsensor_array[0])/2;
-  if ((Verror <= 2) && (Verror >= -2)){
+  if ((Verror <= 23) && (Verror >= -2)){
     Verror = 0;
   }
   VP = Verror;  
@@ -237,21 +237,21 @@ void turn_calc(void){
 }
 
 void inc_servo_H(void){
-  current_angle_H += 1;
+  current_angle_H += 2;
   SET_SERVO_H(current_angle_H);
 }
 
 void inc_servo_V(void){
-  current_angle_V += 1;
+  current_angle_V += 2;
   SET_SERVO_V(current_angle_V);
 }
 void dec_servo_H(void){
-  current_angle_H -= 1;
+  current_angle_H -= 2;
   SET_SERVO_H(current_angle_H);
 }
 
 void dec_servo_V(void){
-  current_angle_V -= 1;
+  current_angle_V -= 2;
   SET_SERVO_V(current_angle_V);
 }
 ////////////////////////////////////////////////
@@ -290,37 +290,38 @@ void ADC_init(void){
 ISR(ADC_vect){
   // set variable based on conversion being completed
   temp_adc = ADCH;
-  // if (temp_adc >= 80) {
-  //   temp_adc -= 80;
-  // } else{
-  //   temp_adc = 0;
-  // }
+  // if (temp_adc > IR_SENSING_THRESHOLD) {
+  if (temp_adc > IR_SENSING_THRESHOLD) {
+    temp_adc = temp_adc - IR_SENSING_THRESHOLD;
+  } else{
+    temp_adc = 0;
+  }
 
   switch (ir_state){ 
-    case ADC4: // Rightmost sensor
-    sensor_array[0] = temp_adc;  
+    case ADC0: // Rightmost sensor
+    sensor_array[3] = temp_adc;  
     SET_MUX(IR2_MUX);
+    ir_state = ADC1;
+    break;
+    
+    case ADC1: // Second Rightmost sensor
+    sensor_array[1] = temp_adc;
+    SET_MUX(IR3_MUX);
+    ir_state = ADC4;
+    break;
+    
+    case ADC4: // Rightmost center sensor
+    sensor_array[0] = temp_adc;
+    // line_sensor_array[3] = temp_adc;
+    SET_MUX(IR4_MUX);
     ir_state = ADC5;
     break;
     
-    case ADC5: // Second Rightmost sensor
-    sensor_array[1] = temp_adc;
-    SET_MUX(IR3_MUX);
-    ir_state = ADC6;
-    break;
-    
-    case ADC6: // Rightmost center sensor
+    case ADC5: // Second Rightmost center sensor
     sensor_array[2] = temp_adc;
-    // line_sensor_array[3] = temp_adc;
-    SET_MUX(IR4_MUX);
-    ir_state = ADC7;
-    break;
-    
-    case ADC7: // Second Rightmost center sensor
-    sensor_array[3] = temp_adc;
     // line_sensor_array[2] = temp_adc;
     SET_MUX(IR1_MUX);
-    ir_state = ADC4;
+    ir_state = ADC0;
     break;
     
     default:

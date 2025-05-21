@@ -15,15 +15,15 @@
 /* IR sensors */
 
 // todo: experiment to find out what these values should be 
-#define IR_SENSING_THRESHOLD 180
+#define IR_SENSING_THRESHOLD 10
 
 #define CLEAR_MUX ADMUX &= 0b11100000
 #define SET_MUX(ADC_CHANNEL) CLEAR_MUX; ADMUX |= ADC_CHANNEL
 
-#define IR1_MUX (1<<MUX2)                           // ADC4   // right most
-#define IR2_MUX (1<<MUX2) | (1<<MUX0)               // ADC5   // second right most
-#define IR3_MUX (1<<MUX2) | (1<<MUX1)               // ADC6   // right most center
-#define IR4_MUX (1<<MUX2) | (1<<MUX1) | (1<<MUX0)   // ADC7   // middle right center
+#define IR1_MUX 0                       // ADC0   // right most
+#define IR2_MUX (1<<MUX0)               // ADC1   // second right most
+#define IR3_MUX (1<<MUX2)               // ADC4   // right most center
+#define IR4_MUX (1<<MUX2) | (1<<MUX0)   // ADC5   // middle right center
 
 /* PID Control Coefficients */
 #define PROPORTIONAL_COEFFICIENT 1
@@ -41,8 +41,9 @@
 #define LED_6 PIN6
 #define LED_7 PIN5
 
-#define TURN_LED_ON(direction_register, led) direction_register |= (1<<led)
-#define TURN_LED_OFF(direction_register, led) direction_register &= ~(1<<led)
+#define TURN_LED_ON(port, led) port |= (1<<led)
+#define TURN_LED_OFF(port, led) port &= ~(1<<led)
+#define TOGGLE_LED(port, led) port ^= (1<<led)
 
 /* SERVO motor control */ 
 #define SET_SERVO_H(x) OCR1A = ((0.5/20.0) + ((x/180.0) * (2))/20.0) * ICR1
@@ -51,20 +52,20 @@
 #define LOWER_ANGLE_LIMIT ((0.5/20.0) + ((0/180.0) * (2))/20.0) * ICR1
 #define RESET_ANGLE ((0.5/20.0) + ((90/180.0) * (2))/20.0) * ICR1
 
-#define IR1_MUX (1<<MUX2)                           // ADC4   // right most
-#define IR2_MUX (1<<MUX2) | (1<<MUX0)               // ADC5   // second right most
-#define IR3_MUX (1<<MUX2) | (1<<MUX1)               // ADC6   // right most center
-#define IR4_MUX (1<<MUX2) | (1<<MUX1) | (1<<MUX0)   // ADC7   // middle right center
+// #define IR1_MUX (1<<MUX2)                           // ADC4   // right most
+// #define IR2_MUX (1<<MUX2) | (1<<MUX0)               // ADC5   // second right most
+// #define IR3_MUX (1<<MUX2) | (1<<MUX1)               // ADC6   // right most center
+// #define IR4_MUX (1<<MUX2) | (1<<MUX1) | (1<<MUX0)   // ADC7   // middle right center
 
 ////////////////////////////////////////////////
 // Type Definitions
 ////////////////////////////////////////////////
 
 typedef enum {
-  ADC4,   // S1
-  ADC5,   // S2
-  ADC6,   // S3
-  ADC7,   // S4
+  ADC0,   // S1
+  ADC1,   // S2
+  ADC4,   // S3
+  ADC5,   // S4
 } IR_STATE_TYPE;
 
 typedef enum {
@@ -112,22 +113,44 @@ volatile IR_STATE_TYPE ir_state = ADC4;
 // Main
 ////////////////////////////////////////////////
 
-int main(void){
+void setup(){
   cli();
 
   // timer_init();
   ADC_init();
   SERVO_PWM_init();
 
-  USBCON=0;
   sei();
 
-  // OCR1A = int(1/20 * 1249);
-  while(1){
-    PID_calc();
-    turn_calc();
-  }
-    // OCR1A += int(1/20 * 1249);
+  Serial.begin(9600);
+}
+
+void loop(){
+  PID_calc();
+  turn_calc();
+  Serial.println("Sensor Readings");
+  Serial.println("---------------");
+  Serial.print("Top Sensor ==> ");
+  Serial.println(sensor_array[0]);
+  Serial.print("Bottom Sensor ==> ");
+  Serial.println(sensor_array[1]);
+  Serial.print("Right Sensor ==> ");
+  Serial.println(sensor_array[2]);
+  Serial.print("Left Sensor ==> ");
+  Serial.println(sensor_array[3]);
+  Serial.println("---------------");
+  Serial.println("Logic Control");
+  Serial.println("---------------");
+  Serial.print("Horizontal Correction Angle ==> ");
+  Serial.println(Hcorrection);
+  Serial.print("Horizontal Error (right +ve) ==> ");
+  Serial.println(Herror);
+  Serial.print("Vertical Correction Angle ==> ");
+  Serial.println(Vcorrection);
+  Serial.print("Vertical Error (up +ve) ==> ");
+  Serial.println(Verror);
+  Serial.println("---------------");
+  delay(200);
 }
 
 ////////////////////////////////////////////////
@@ -141,10 +164,10 @@ void PID_calc(void){
   // index 1 - TOP RIGHT IR SENSOR
   // index 2 - BOTTOM LEFT IR SENSOR
   // index 3 - BOTTOM RIGHT IR SENSOR
-  Hsensor_array[0] = sensor_array[0] + sensor_array[2]; // LEFT (-)
-  Hsensor_array[1] = sensor_array[1] + sensor_array[3]; // RIGHT (+)
-  Vsensor_array[0] = sensor_array[2] + sensor_array[3]; // DOWN (-)
-  Vsensor_array[1] = sensor_array[2] + sensor_array[3]; // UP (+)
+  Hsensor_array[0] = sensor_array[3]; // LEFT (-)
+  Hsensor_array[1] = sensor_array[2]; // RIGHT (+)
+  Vsensor_array[0] = sensor_array[1]; // DOWN (-)
+  Vsensor_array[1] = sensor_array[0]; // UP (+)
 
   /* Horizontal Correction Calculations */
   Hsensor_average = 0;
@@ -236,36 +259,36 @@ ISR(ADC_vect){
   temp_adc = ADCH;
   // if (temp_adc > IR_SENSING_THRESHOLD) {
   if (temp_adc > IR_SENSING_THRESHOLD) {
-    temp_adc = 1;
+    temp_adc = temp_adc - IR_SENSING_THRESHOLD;
   } else{
     temp_adc = 0;
   }
 
   switch (ir_state){ 
-    case ADC4: // Rightmost sensor
-    sensor_array[0] = temp_adc;  
+    case ADC0: // Rightmost sensor
+    sensor_array[3] = temp_adc;  
     SET_MUX(IR2_MUX);
+    ir_state = ADC1;
+    break;
+    
+    case ADC1: // Second Rightmost sensor
+    sensor_array[1] = temp_adc;
+    SET_MUX(IR3_MUX);
+    ir_state = ADC4;
+    break;
+    
+    case ADC4: // Rightmost center sensor
+    sensor_array[0] = temp_adc;
+    // line_sensor_array[3] = temp_adc;
+    SET_MUX(IR4_MUX);
     ir_state = ADC5;
     break;
     
-    case ADC5: // Second Rightmost sensor
-    sensor_array[1] = temp_adc;
-    SET_MUX(IR3_MUX);
-    ir_state = ADC6;
-    break;
-    
-    case ADC6: // Rightmost center sensor
+    case ADC5: // Second Rightmost center sensor
     sensor_array[2] = temp_adc;
-    // line_sensor_array[3] = temp_adc;
-    SET_MUX(IR4_MUX);
-    ir_state = ADC7;
-    break;
-    
-    case ADC7: // Second Rightmost center sensor
-    sensor_array[3] = temp_adc;
     // line_sensor_array[2] = temp_adc;
     SET_MUX(IR1_MUX);
-    ir_state = ADC4;
+    ir_state = ADC0;
     break;
     
     default:

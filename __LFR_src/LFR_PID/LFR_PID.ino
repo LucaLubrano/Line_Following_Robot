@@ -14,19 +14,7 @@
 // Configurations
 ////////////////////////////////////////////////
 
-/* General Pin Arrangement */
-
-#define PIN0 0b00000001
-#define PIN1 0b00000010
-#define PIN2 0b00000100 
-#define PIN3 0b00001000
-#define PIN4 0b00010000
-#define PIN5 0b00100000
-#define PIN6 0b01000000
-#define PIN7 0b10000000
-
 /* IR sensors */
-
 // todo: experiment to find out what these values should be 
 #define WHITE_LINE_THRESHOLD 120
 #define BLACK_LINE_THRESHOLD 120 
@@ -35,7 +23,10 @@
 
 #define DETECT_WHITE(sensor) (sensor > WHITE_LINE_THRESHOLD)
 #define DETECT_BLACK(sensor) (sensor < BLACK_LINE_THRESHOLD)
-
+#define DETECT_RED(sensor) (sensor < RED_LIGHT_LEVEL)
+#define DETECT_GREEN(sensor) (sensor < GREEN_LIGHT_LEVEL)
+#define DETECT_TURNING_MARKER detect_rising_edge(sensor_array[6], sensor_array[7])
+#define PB_PRESSED 0 
 // #define STRAIGHT_IR_CONFIG (DETECT_BLACK(sensor_array.CNTR_IR1) && DETECT_WHITE(sensor_array.CNTR_IR2) && DETECT_WHITE(sensor_array.CNTR_IR3) && DETECT_BLACK(sensor_array.CNTR_IR4))
 
 #define LEFT_SENSORS_DETECT_WHITE ((sensor_array.LEFT_IR1 > WHITE_LINE_THRESHOLD) || (sensor_array.LEFT_IR2 > WHITE_LINE_THRESHOLD))
@@ -50,25 +41,14 @@
 #define IR2_MUX (1<<MUX2) | (1<<MUX0)               // ADC5   // second right most
 #define IR3_MUX (1<<MUX2) | (1<<MUX1)               // ADC6   // right most center
 #define IR4_MUX (1<<MUX2) | (1<<MUX1) | (1<<MUX0)   // ADC7   // middle right center
-#define IR5_MUX (1<<MUX1) | (1<<MUX0)   // ADC11  // middle left center
-#define IR6_MUX (1<<MUX1)               // ADC10  // left most center
-#define IR7_MUX (1<<MUX0)               // ADC9   // second left most
-#define IR8_MUX                            // ADC8   // left most
+#define IR5_MUX (1<<MUX1) | (1<<MUX0)               // ADC11  // middle left center
+#define IR6_MUX (1<<MUX1)                           // ADC10  // left most center
+#define IR7_MUX (1<<MUX0)                           // ADC9   // second left most
+#define IR8_MUX       
 
-/* LEDs */
-
-#define LED_0 PIN6
-#define LED_1 PIN0
-#define LED_2 PIN1
-#define LED_3 PIN2
-#define LED_4 PIN7
-#define LED_5 PIN0
-#define LED_6 PIN6
-#define LED_7 PIN5
-
-#define TURN_LED_ON(direction_register, led) direction_register |= (1<<led)
-#define TURN_LED_OFF(direction_register, led) direction_register &= ~(1<<led)
-
+#define TURN_LED_ON(port, pin) port |= pin
+#define TURN_LED_OFF(port, pin) port &= ~pin
+#define TOGGLE_LED(port, pin) port ^= pin
 /* Motor pins */ 
 
 // check these values through testing
@@ -79,6 +59,7 @@
 #define TRACK_ADJUSTMENT_SPEED 1
 
 #define SPEED_LIMIT (64+64)
+#define SLOW_ZONE_MTR_SPEED 64
 
 #define LEFT_MOTOR OCR0B
 #define RIGHT_MOTOR OCR0A 
@@ -95,8 +76,39 @@
 // then use D not I 
 // use I 
 
-/* Buttons */
-#define PB_PRESSED (PINC & (1<<7))
+/* Light Setup */
+#define STOP_LED_DDR DDRB
+#define STRAIGHT_LED_DDR DDRB
+#define OBSTACLE_LED_DDR DDRD
+#define TURRET_ON_DDR DDRD
+#define TURRET_TRACKING_DDR DDRD
+
+#define STOP_LED_PORT PORTB
+#define STRAIGHT_LED_PORT PORTB
+#define OBSTACLE_LED_PORT PORTD
+#define TURRET_ON_PORT PORTD
+#define TURRET_TRACKING_PORT PORTD
+
+#define STOP_LED_PIN PIN3
+#define STRAIGHT_LED_PIN PIN7
+#define OBSTACLE_LED_PIN PIN0
+#define TURRET_ON_PIN PIN1
+#define TURRET_TRACKING_PIN PIN2
+
+// Recieve signal from turret
+#define TURRET_INPUT_DDR 0 
+#define TURRET_INPUT_PORT 0
+#define TURRET_INPUT_PIN 0
+
+// Send signal to turret
+#define TURRET_OUTPUT_DDR 0
+#define TURRET_OUTPUT_PORT 0
+#define TURRET_OUTPUT_PIN 0
+
+// 
+#define SEND_SIGNAL_TO_TURRET SETBIT(TURRET_OUTPUT_PORT, TURRET_OUTPUT_PIN)
+#define STOP_SIGNAL_TO_TURRET CLRBIT(TURRET_OUTPUT_PORT, TURRET_OUTPUT_PIN)
+#define CHECK_SIGNAL_RECEIVE (TURRET_INPUT_PORT & TURRET_INPUT_PIN)
 
 ////////////////////////////////////////////////
 // Type Definitions
@@ -106,8 +118,8 @@ typedef enum {
   IDLE,
   STRAIGHT,
   TURNING,
-  SLOW_ZONE,
-  OBSTACLE,
+  SLOW_STRAIGHT,
+  SLOW_TURNING,
 } BOT_STATE_TYPE;
 
 typedef enum {
@@ -147,7 +159,6 @@ typedef struct {
 void timer_init(void);
 void ADC_init(void);
 void MOTOR_PWM_init(void);
-void LED_init(void);
 void bot_state_machine(void);
 void motor_state_machine(void);
 void IR_state_machine(void);
@@ -155,8 +166,13 @@ void PID_calc(void);
 void PID_init(void);
 void turn_calc(void);
 void set_motors(int L , int R);
-
-
+void COMMS_init(void);
+void LED_init(void);
+void CLEAR_LEDS(void);
+void SET1_LED(int PORT, int PIN);
+void SET2_LED(int PORT1, int PIN_1, int PORT2, int PIN_2);
+void SET3_LED(int PORT1, int PIN_1, int PORT2, int PIN_2, int PORT3, int PIN_3);
+int detect_rising_edge(int current_sensor1, int current_sensor2);
 
 ////////////////////////////////////////////////
 // Global Variable Declaration
@@ -182,37 +198,211 @@ volatile float error, correction, sp;
 volatile int position, sensor_average, sensor_sum;
 volatile int currentspeedR = 64;
 volatile int currentspeedL = 64;
+volatile bool slow_zone = false;
+volatile int prev_sensor1 = 0;
+volatile int prev_sensor2 = 0;
+// volatile int current_corner_sensor = 0;
+
 
 ////////////////////////////////////////////////
 // Main
 ////////////////////////////////////////////////
 
-int main(void){
+void setup() {
   // Pause interupts before initialisation
   cli();
 
   // Initialisation
-  timer_init();
   ADC_init();
   MOTOR_PWM_init();
+  COMMS_init();
   LED_init();
-
   // Reset interupts after initialisation
-  USBCON=0;
   sei();
-
-  // Robot state machine
-  // bot_state_machine();
-  // while(1){
-  //   PID_calc();
-  //   turn_calc();
-  // }
-  set_motors(80,80);
+  SET1_LED(STOP_LED_PORT, STOP_LED_PIN);
+  set_motors(0,0);
 }
 
+void loop() {
+  // PID_calc();
+  // turn_calc();
+  robot_state_machine();
+}
 ////////////////////////////////////////////////
 // Control System and State Machines
 ////////////////////////////////////////////////
+
+void robot_state_machine(void){
+
+  switch(bot_state){
+    case IDLE:
+      if(PB_PRESSED){
+        SET1_LED(STRAIGHT_LED_PORT, STRAIGHT_LED_PIN);
+        bot_state = STRAIGHT;
+      }
+    break;
+    
+    case STRAIGHT:
+      PID_calc();
+      turn_calc();
+      if(DETECT_TURNING_MARKER){
+        CLEAR_LEDS();
+        bot_state = TURNING;
+      }
+      if(DETECT_RED){
+        SEND_SIGNAL_TO_TURRET;
+        SET2_LED(STRAIGHT_LED_PORT, STRAIGHT_LED_PIN, TURRET_ON_PORT, TURRET_ON_PIN);
+        bot_state = SLOW_ZONE_STRAIGHT;
+        set_motors(SLOW_ZONE_MTR_SPEED, SLOW_ZONE_MTR_SPEED);
+      } 
+    break;
+
+    case TURNING:
+      PID_calc();
+      turn_calc();
+      if(DETECT_TURNING_MARKER){
+        SET1_LED(STRAIGHT_LED_PORT, STRAIGHT_LED_PIN);
+        bot_state = STRAIGHT;
+      }
+      if(DETECT_RED){
+        SEND_SIGNAL_TO_TURRET;
+        SET1_LED(TURRET_ON_PORT, TURRET_ON_PIN);
+        bot_state = SLOW_ZONE_TURNING;
+        set_motors(SLOW_ZONE_MTR_SPEED, SLOW_ZONE_MTR_SPEED);
+      } 
+    break;
+
+    case SLOW_ZONE_STRAIGHT:
+      PID_calc();
+      turn_calc();
+
+      if(DETECT_TURNING_MARKER){
+        if(RECEIVE_TRACKING_SIGNAL){
+          SET2_LED(TURRET_ON_PORT, TURRET_ON_PIN, TURRET_TRACKING_PORT, TURRET_TRACKING_PIN);
+        } else{
+          SET1_LED(TURRET_ON_PORT, TURRET_ON_PIN);
+        }
+        bot_state = SLOW_ZONE_TURNING;
+      } else if(DETECT_GREEN){
+        STOP_SIGNAL_TO_TURRET;
+        bot_state = STRAIGHT;
+        SET1_LED(STRAIGHT_LED_PORT, STRAIGHT_LED_PIN);
+        set_motors(SPEED_LIMIT, SPEED_LIMIT);
+      } 
+    
+      if(DETECT_OBSTACLE){
+        set_motors(OBSTACLE_SPEED, OBSTACLE_SPEED);
+        SET4_LED(STRAIGHT_LED_PORT, STRAIGHT_LED_PIN, TURRET_ON_PORT, TURRET_ON_PIN, TURRET_TRACKING_PORT, TURRET_TRACKING_PIN, OBSTACLE_LED_PORT, OBSTACLE_LED_PIN);
+      } else {
+        if(CHECK_SIGNAL_RECEIVE){
+          SET3_LED(STRAIGHT_LED_PORT, STRAIGHT_LED_PIN, TURRET_ON_PORT, TURRET_ON_PIN, TURRET_TRACKING_PORT, TURRET_TRACKING_PIN);
+        } else {
+          SET2_LED(STRAIGHT_LED_PORT, STRAIGHT_LED_PIN, TURRET_TRACKING_PORT, TURRET_TRACKING_PIN);
+        }
+      }
+    break;
+
+    case SLOW_ZONE_TURNING:
+      PID_calc();
+      turn_calc();
+
+      if(DETECT_TURNING_MARKER){
+        if(CHECK_SIGNAL_RECEIVE){
+          SET3_LED(STRAIGHT_LED_PORT, STRAIGHT_LED_PIN, TURRET_ON_PORT, TURRET_ON_PIN, TURRET_TRACKING_PORT, TURRET_TRACKING_PIN);
+        } else{
+          SET2_LED(STRAIGHT_LED_PORT, STRAIGHT_LED_PIN, TURRET_ON_PORT, TURRET_ON_PIN);
+        }
+        bot_state = SLOW_ZONE_STRAIGHT;
+      } else if(DETECT_GREEN){
+        STOP_SIGNAL_TO_TURRET;
+        bot_state = TURNING;
+        CLEAR_LEDS();
+        set_motors(SPEED_LIMIT, SPEED_LIMIT);
+      } 
+    
+    break;
+  }
+
+
+
+
+
+  // switch(bot_state){
+  //   case IDLE:      
+  //     if (PB_PRESSED){
+  //       SET1_LED(STRAIGHT_LED_PORT, STRAIGHT_LED_PIN);
+  //       bot_state = STRAIGHT;
+  //     }
+  //   break;
+
+  //   case STRAIGHT:
+  //     PID_calc();
+  //     turn_calc();
+
+  //     // Check if we are going around a corner
+  //     if (DETECT_CORNER(sensor_array[6], sensor_array[7])){
+  //       // If not in a slowzone, we want no lights on
+  //       if(!slow_zone){
+  //         CLEAR_LEDS();  
+  //       } else if (slow_zone) { // If in a slow zone want turret light on
+  //         SET1_LED(TURRET_ON_PORT, STRAIGHT_LED_PIN);
+  //       }
+  //       bot_state = TURNING;    
+  //     } else {
+  //       // Check if we are entering of exiting a slow zone
+  //       if (DETECT_RED(0)){
+  //         slow_zone = true;
+  //         SET2_LED(STRAIGHT_LED_PORT, STRAIGHT_LED_PIN, TURRET_ON_PORT, TURRET_ON_PIN);
+  //         SEND_SIGNAL_TO_TURRET;
+  //         bot_state = SLOW_ZONE;    
+  //       } else if (DETECT_GREEN(0)){
+  //         slow_zone = false;
+  //         SET1_LED(STRAIGHT_LED_PORT, STRAIGHT_LED_PIN);
+  //         STOP_SIGNAL_TO_TURRET;
+  //         bot_state = STRAIGHT;
+  //       }
+  //     }
+      
+  //   break;
+
+  //   case TURNING:
+  //     PID_calc();
+  //     turn_calc();
+
+  //     // Check if we are coming out of the corner
+  //     if (DETECT_CORNER(sensor_array[6], sensor_array[7])){
+  //       SET1_LED(STRAIGHT_LED_PORT, STRAIGHT_LED_PIN);
+  //       bot_state = STRAIGHT;    
+  //     } else if (DETECT_RED(0)){
+  //       TURN_LED_OFF(DDRB, TURN_LED);
+  //       TURN_LED_ON(DDRE, SLOW_LED);
+  //       bot_state = SLOW_ZONE;    
+  //     }
+  //   break;
+
+  //   case SLOW_ZONE:
+  //     PID_calc();
+  //     turn_calc();
+  //     if(DETECT_GREEN(0)){
+  //       TURN_LED_OFF(DDRB, SLOW_LED);
+  //       bot_state = STRAIGHT;
+  //     }
+  //     PID_calc();
+  //     turn_calc();
+  //   break;
+
+  //   case OBSTACLE:
+      
+    
+  //   bot_state = STRAIGHT;
+  //   break;
+
+  //   default:
+  //   bot_state = IDLE;
+  //   break;
+  // }
+}
+
 
 // todo: make the pwm init run when a button is pressed
 void sensor_value_average(void){
@@ -238,7 +428,6 @@ void PID_calc(void){
 }
 
 void turn_calc(void){
-
 //   r_mtr_speed = basespeed + correction;
 //   l_mtr_speed = basespeed - correction;
 
@@ -258,7 +447,7 @@ void turn_calc(void){
   currentspeedR += correction;
   currentspeedL -= correction;
 
-if (currentspeedR > maxspeed){
+  if (currentspeedR > maxspeed){
     currentspeedR = maxspeed;
   } else if (currentspeedR < 0) {
     currentspeedR = 0;
@@ -297,7 +486,6 @@ void timer_init(void){
   OCR1A = 31250;
   TIMSK1 = 2;
 }
-
 void ADC_init(void){
   // Set up ADC
   ADMUX |= (1<<REFS0) | (1<<ADLAR);
@@ -310,15 +498,12 @@ void ADC_init(void){
   // Start ADC
   ADCSRA |= (1<<ADSC);  
 }
-
-void LED_init(void){
-  // Set all to outputs
-  SETBIT(DDRE, LED_0);
-  SETBIT(DDRB, LED_1);
-  SETBIT(DDRB, LED_2);
-  SETBIT(DDRB, LED_3);
+void COMMS_init(void){
+  SETBIT(TURRET_INPUT_DDR, TURRET_INPUT_PIN); // Set SIG TRK to input
+  SETBIT(TURRET_OUTPUT_DDR, TURRET_OUTPUT_PIN); // Set SIG SZ to input
+  CLRBIT(TURRET_INPUT_PORT, TURRET_INPUT_PIN); // Set to low
+  CLRBIT(TURRET_OUTPUT_PORT, TURRET_OUTPUT_PIN); // Set to low
 }
-
 void MOTOR_PWM_init(void){
   // Set pins b7 and d0 to output to expose pwm signal to pin
   SETBIT(DDRB, PB7);
@@ -336,16 +521,51 @@ void MOTOR_PWM_init(void){
   // SETBIT(PORTB, PB0);
   // CLRBIT(PORTE, PE6);
 }
-
-// switch 1
-void button_init(void){ 
-  DDRC &= ~(1<<7);
-  PORTB &= ~(1<<7);
+void LED_init(void){
+  // Set as output
+  SETBIT(STOP_LED_DDR, STOP_LED_PIN);
+  SETBIT(STRAIGHT_LED_DDR, STRAIGHT_LED_PIN);
+  SETBIT(OBSTACLE_LED_DDR, OBSTACLE_LED_PIN);
+  SETBIT(TURRET_ON_DDR, TURRET_ON_PIN);
+  SETBIT(TURRET_TRACKING_DDR, TURRET_TRACKING_PIN);
+  CLEAR_LEDS();
 }
-
-////////////////////////////////////////////////
-// Function Definitions
-////////////////////////////////////////////////
+void CLEAR_LEDS(void){
+  // Set to off
+  CLRBIT(STOP_LED_PORT, STOP_LED_PIN);
+  CLRBIT(STRAIGHT_LED_PORT, STRAIGHT_LED_PIN);
+  CLRBIT(OBSTACLE_LED_PORT, OBSTACLE_LED_PIN);
+  CLRBIT(TURRET_ON_PORT, TURRET_ON_PIN);
+  CLRBIT(TURRET_TRACKING_PORT, TURRET_TRACKING_PIN);
+}
+void SET1_LED(int PORT, int PIN){
+  CLEAR_LEDS();
+  SETBIT(PORT, PIN);
+}
+void SET2_LED(int PORT1, int PIN_1, int PORT2, int PIN_2){
+  CLEAR_LEDS();
+  SETBIT(PORT1, PIN_1);
+  SETBIT(PORT2, PIN_2);
+}
+void SET3_LED(int PORT1, int PIN_1, int PORT2, int PIN_2, int PORT3, int PIN_3){
+  CLEAR_LEDS();
+  SETBIT(PORT1, PIN_1);
+  SETBIT(PORT2, PIN_2);
+  SETBIT(PORT3, PIN_3);
+}
+void SET4_LED(int PORT1, int PIN_1, int PORT2, int PIN_2, int PORT3, int PIN_3, int PORT4, int PIN_3){
+  CLEAR_LEDS();
+  SETBIT(PORT1, PIN_1);
+  SETBIT(PORT2, PIN_2);
+  SETBIT(PORT3, PIN_3);
+  SETBIT(PORT4, PIN_4);
+}
+int detect_rising_edge(int current_sensor1, int current_sensor2){
+  int val_changed = 0; int rising_edge = 0;
+  val_changed = (prev_sensor1 ^ current_sensor1) | (prev_sensor2 ^ current_sensor2);
+  rising_edge = (prev_sensor1 & current_sensor1) | (prev_sensor2 & current_sensor2);
+  return rising_edge;
+} 
 
 ////////////////////////////////////////////////
 // Interupt Service Routines
@@ -376,14 +596,14 @@ ISR(ADC_vect){
     
     case ADC6: // Rightmost center sensor
     sensor_array[2] = temp_adc;
-    line_sensor_array[3] = temp_adc;
+    // line_sensor_array[3] = temp_adc;
     SET_MUX(IR4_MUX);
     ir_state = ADC7;
     break;
     
     case ADC7: // Second Rightmost center sensor
     sensor_array[3] = temp_adc;
-    line_sensor_array[2] = temp_adc;
+    line_sensor_array[3] = temp_adc;
     SET_MUX(IR5_MUX);
     ADCSRB |= (1<<MUX5);
     ir_state = ADC11;
@@ -391,7 +611,7 @@ ISR(ADC_vect){
     
     case ADC11: // Second Leftmost center sensor
     sensor_array[4] = temp_adc;
-    line_sensor_array[1] = temp_adc;
+    line_sensor_array[2] = temp_adc;
     SET_MUX(IR6_MUX);
     ADCSRB |= (1<<MUX5);
     ir_state = ADC10;
@@ -399,7 +619,7 @@ ISR(ADC_vect){
     
     case ADC10: // Leftmost center sensor
     sensor_array[5] = temp_adc;
-    line_sensor_array[0] = temp_adc;
+    // line_sensor_array[0] = temp_adc;
     SET_MUX(IR7_MUX);
     ADCSRB |= (1<<MUX5);
     ir_state = ADC9;
@@ -407,7 +627,7 @@ ISR(ADC_vect){
     
     case ADC9: // second Leftmost sensor
     sensor_array[6] = temp_adc;
-    // line_sensor_array[3] = temp_adc;
+    line_sensor_array[1] = temp_adc;
     CLEAR_MUX;
     ADCSRB |= (1<<MUX5);
     ir_state = ADC8;
@@ -415,7 +635,7 @@ ISR(ADC_vect){
     
     case ADC8: // Leftmost sensor
     sensor_array[7] = temp_adc;
-    // line_sensor_array[2] = temp_adc;
+    line_sensor_array[0] = temp_adc;
     SET_MUX(IR1_MUX);
     ADCSRB &= ~(1<<MUX5);
     ir_state = ADC4;
@@ -429,56 +649,3 @@ ISR(ADC_vect){
   ADCSRA |= (1<<ADSC);
 }
 
-// 5ms periodic timer interupt
-
-// ISR(TIMER1_COMPA_vect){
-//   switch(bot_state){
-//     case IDLE:
-//       if PB_PRESSED{
-//         TURN_LED_ON(DDRE, LED_0);
-//         bot_state = STRAIGHT;
-//       }
-//     break;
-
-//     case STRAIGHT:
-//       if (LEFT_SENSORS_DETECT_WHITE || RIGHT_SENSORS_DETECT_WHITE){
-//         TURN_LED_OFF(DDRE, LED_0);
-//         TURN_LED_ON(DDRB, LED_1);
-//         bot_state = TURNING;    
-//       }
-
-//       if (DETECT_RED){
-//         bot_state = SLOW_ZONE;    
-//       }
-//     break;
-
-//     case TURNING:
-//       if (LEFT_SENSORS_DETECT_WHITE || RIGHT_SENSORS_DETECT_WHITE){
-//         TURN_LED_ON(DDRE, LED_0);
-//         TURN_LED_OFF(DDRB, LED_1);
-//         bot_state = STRAIGHT;    
-//       }
-
-//       bot_state = ;
-//       if (DETECT_RED){
-//         bot_state = SLOW_ZONE;    
-//       }
-//     break;
-
-//     case SLOW_ZONE:
-//       if(DETECT_GREEN){
-//         bot_state = TURNING;
-//       }
-//       bot_state = STRAIGHT;
-//     break;
-
-//     case OBSTACLE:
-    
-//     bot_state = STRAIGHT;
-//     break;
-
-//     default:
-//     bot_state = IDLE;
-//     break;
-//   }
-// }
