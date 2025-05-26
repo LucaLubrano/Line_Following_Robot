@@ -11,7 +11,7 @@ void setup() {
 
   // put your setup code here, to run once:
   TCCR0A = (1<< COM0A1) | (1<<COM0B1) | (1<<WGM01) | (1<< WGM00);
-  TCCR0B = (1<<CS00);
+  TCCR0B = (1<<CS02);
 
   // // set pits b0 and e6 to outputs for phase control
   // SETBIT(DDRB, PB0);

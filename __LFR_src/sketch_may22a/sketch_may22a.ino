@@ -19,10 +19,10 @@
 #define CLEAR_MUX ADMUX &= 0b11100000
 #define SET_MUX(ADC_CHANNEL) CLEAR_MUX; ADMUX |= ADC_CHANNEL
 
-#define IR1_MUX 0                                   // ADC4   // right most
-#define IR2_MUX (1<<MUX0)                           // ADC5   // second right most
-#define IR3_MUX (1<<MUX2)                           // ADC6   // right most center
-#define IR4_MUX (1<<MUX2) | (1<<MUX0)               // ADC7   // middle right center
+#define IR1_MUX (1<<MUX2)                                   // ADC4   // right most
+#define IR2_MUX (1<<MUX2) | (1<<MUX1)                           // ADC5   // second right most
+#define IR3_MUX (1<<MUX2) | (1<<MUX0)                          // ADC6   // right most center
+#define IR4_MUX (1<<MUX2) | (1<<MUX0) | (1<<MUX1)               // ADC7   // middle right center
 
 /* PID Control Coefficients */
 #define PROPORTIONAL_COEFFICIENT 1
@@ -134,8 +134,8 @@ void setup(){
   delay(500); 
 }
 void loop(){
-  PID_calc();
-  turn_calc();
+  // PID_calc();
+  // turn_calc();
   Serial.println("Sensor Readings");
   Serial.println("---------------");
   Serial.print("Top Sensor ==> ");
@@ -144,9 +144,9 @@ void loop(){
   Serial.println(sensor_array[1]);
   Serial.print("Right Sensor ==> ");
   Serial.println(sensor_array[2]);
-  Serial.print("Left Sensor ==> ");
-  Serial.println(sensor_array[3]);
-  Serial.println("---------------");
+  // Serial.print("Left Sensor ==> ");
+  // Serial.println(sensor_array[3]);
+  // Serial.println("---------------");
   // Serial.println("Logic Control");
   // Serial.println("---------------");
   // Serial.print("Horizontal Correction Angle ==> ");
@@ -162,7 +162,7 @@ void loop(){
   // Serial.print("Current Vertical Angle ==> ");
   // Serial.println(current_angle_V);
   // Serial.println("---------------");
-  delay(30);
+  delay(100);
 }
 
 ////////////////////////////////////////////////
@@ -291,15 +291,15 @@ ISR(ADC_vect){
   // set variable based on conversion being completed
   temp_adc = ADCH;
   // if (temp_adc > IR_SENSING_THRESHOLD) {
-  if (temp_adc > IR_SENSING_THRESHOLD) {
-    temp_adc = temp_adc - IR_SENSING_THRESHOLD;
-  } else{
-    temp_adc = 0;
-  }
+  // if (temp_adc > IR_SENSING_THRESHOLD) {
+  //   temp_adc = temp_adc - IR_SENSING_THRESHOLD;
+  // } else{
+  //   temp_adc = 0;
+  // }
 
   switch (ir_state){ 
     case ADC0: // Rightmost sensor
-    sensor_array[3] = temp_adc;  
+    sensor_array[0] = temp_adc;  
     SET_MUX(IR2_MUX);
     ir_state = ADC1;
     break;
@@ -311,14 +311,14 @@ ISR(ADC_vect){
     break;
     
     case ADC4: // Rightmost center sensor
-    sensor_array[0] = temp_adc;
+    sensor_array[2] = temp_adc;
     // line_sensor_array[3] = temp_adc;
     SET_MUX(IR4_MUX);
     ir_state = ADC5;
     break;
     
     case ADC5: // Second Rightmost center sensor
-    sensor_array[2] = temp_adc;
+    // sensor_array[2] = temp_adc;
     // line_sensor_array[2] = temp_adc;
     SET_MUX(IR1_MUX);
     ir_state = ADC0;

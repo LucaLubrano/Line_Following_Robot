@@ -55,8 +55,8 @@
 #define IR5_MUX (1<<MUX1) | (1<<MUX0)               // ADC11  // middle left center
 #define IR6_MUX (1<<MUX1)                           // ADC10  // left most center
 #define IR7_MUX (1<<MUX0)                           // ADC9   // second left most
-#define IR8_MUX 0    
-#define IRC1_MUX 0
+#define IR8_MUX     
+#define IRC1_MUX 
 #define IRC2_MUX (1<<MUX0)
 
 #define TURN_LED_ON(port, pin) port |= pin
@@ -112,14 +112,14 @@
 #define TURRET_TRACKING_PIN PIN2
 
 // Recieve signal from turret
-#define TURRET_INPUT_DDR DDRB 
+#define TURRET_INPUT_DDR DDRB
 #define TURRET_INPUT_PORT PORTB
-#define TURRET_INPUT_PIN PIN0
+#define TURRET_INPUT_PIN PIN5
 
 // Send signal to turret
 #define TURRET_OUTPUT_DDR DDRB
 #define TURRET_OUTPUT_PORT PORTB
-#define TURRET_OUTPUT_PIN PIN0
+#define TURRET_OUTPUT_PIN PIN6
 
 // 
 #define SEND_SIGNAL_TO_TURRET SETBIT(TURRET_OUTPUT_PORT, TURRET_OUTPUT_PIN)
@@ -254,19 +254,34 @@ void setup() {
 }
 
 void loop(){
-  Serial.println("--------------------");
-  Serial.println(line_sensor_array[0]);
-  Serial.println(line_sensor_array[1]);
-  Serial.println(line_sensor_array[2]);
-  Serial.println(line_sensor_array[3]);
-  Serial.println(line_sensor_array[4]);
-  Serial.println(line_sensor_array[5]);
-  Serial.println(side_sensor_array[0]);
-  Serial.println(side_sensor_array[1]);
-  Serial.println("--------------------");
-  delay(100);
   PID_calc();
   turn_calc();
+  // Serial.println("--------------------");
+  // Serial.println(line_sensor_array[0]);
+  // Serial.println(line_sensor_array[1]);
+  // Serial.println(line_sensor_array[2]);
+  // Serial.println(line_sensor_array[3]);
+  // Serial.println(line_sensor_array[4]);
+  // Serial.println(line_sensor_array[5]);
+  // Serial.println("--------------------");
+  // Serial.println("Logic Control");
+  // Serial.println("---------------");
+  // Serial.print("Average ==> ");
+  // Serial.println(sensor_sum);
+  // Serial.print("Sum ==> ");
+  // Serial.println(sensor_average);
+  // Serial.print("Position ==> ");
+  // Serial.println(position);
+  // Serial.print("Error ==> ");
+  // Serial.println(error);
+  // Serial.print("Current R Speed ==> ");
+  // Serial.println(currentspeedR);
+  // Serial.print("Current L Speed ==> ");
+  // Serial.println(currentspeedL);
+  // Serial.println("---------------");
+
+  // delay(100);
+  
 }
 
 ////////////////////////////////////////////////
@@ -371,16 +386,24 @@ void sensor_value_average(void){
   sensor_average = 0;
   sensor_sum = 0;
   // todo: (?) make a for loop?
-  sensor_average = (line_sensor_array[0] * -3 * 1000.0) + (line_sensor_array[1] * -2 * 1000) + (line_sensor_array[2] * -1 * 1000) + (line_sensor_array[3] * 1 * 1000) + (line_sensor_array[4] * 2 * 1000) + (line_sensor_array[5] * 3 * 1000);
+  sensor_average = (line_sensor_array[0] * -3 ) + (line_sensor_array[1] * -2 ) + (line_sensor_array[2] * -1 ) + (line_sensor_array[3] * 1 ) + (line_sensor_array[4] * 2 ) + (line_sensor_array[5] * 3 );
   // sensor_average = (line_sensor_array[0] * -2) + (line_sensor_array[1] * -1) + (line_sensor_array[2] * 1) + (line_sensor_array[3] * 2);
-  sensor_sum = int(line_sensor_array[0]) + int(line_sensor_array[1]) + int(line_sensor_array[2]) + int(line_sensor_array[3]) + int(line_sensor_array[4]) + int(line_sensor_array[5]);
-  position = sensor_average / sensor_sum;
+  sensor_sum = line_sensor_array[0] + line_sensor_array[1] + line_sensor_array[2] + line_sensor_array[3] + line_sensor_array[4] + line_sensor_array[5];
+  if (sensor_average == 0){
+    position = 0;
+  } else {
+    position = sensor_average / sensor_sum;
+  }
+  
 }
 
 void PID_calc(void){
   sensor_value_average();
   // error = position - sp;
   // if(!(line_sensor_array[0] & line_sensor_array[5])){
+  // if ((error > -1) & (error < 1)){
+  //   error = 0;
+  // }
   error = position ;
   P = error;
   I += P;
@@ -476,7 +499,7 @@ void MOTOR_PWM_init(void){
   
   // todo: Set this up to be more readable ie why we set the bits how we do
   TCCR0A |= (1<< COM0A1) | (1<<COM0B1) | (1<<WGM01) | (1<<WGM00);
-  TCCR0B |= (1<<CS02);
+  TCCR0B |= (1<<CS00);
 
   // set pits b0 and e6 to outputs for phase control
   // SETBIT(DDRB, PB0);
@@ -550,47 +573,47 @@ ISR(ADC_vect){
 
       switch (line_ir_state){ 
         case ADC4: // Rightmost sensor
-        line_sensor_array[0] = temp_adc;  
+        line_sensor_array[2] = temp_adc;  
         SET_MUX(IR2_MUX);
         ADCSRB &= ~(1<<MUX5);
         line_ir_state = ADC5;
         break;
         
         case ADC5: // Second Rightmost sensor
-        line_sensor_array[1] = temp_adc;
+        line_sensor_array[5] = temp_adc;
         SET_MUX(IR3_MUX);
         line_ir_state = ADC6;
         break;
         
         case ADC6: // Rightmost center sensor
-        side_sensor_array[0] = temp_adc;
+        line_sensor_array[4] = temp_adc;
         SET_MUX(IR4_MUX);
         line_ir_state = ADC7;
         break;
         
         case ADC7: // Second Rightmost center sensor
-        line_sensor_array[3] = temp_adc;
+        line_sensor_array[0] = temp_adc;
         SET_MUX(IR5_MUX);
         ADCSRB |= (1<<MUX5);
         line_ir_state = ADC11;
         break;
         
         case ADC11: // Second Leftmost center sensor
-        line_sensor_array[5] = temp_adc;
+        line_sensor_array[1] = temp_adc;
         SET_MUX(IR6_MUX);
         ADCSRB |= (1<<MUX5);
         line_ir_state = ADC10;
         break;
         
         case ADC10: // Leftmost center sensor
-        side_sensor_array[1] = temp_adc;
+        line_sensor_array[3] = temp_adc;
         SET_MUX(IR7_MUX);
         ADCSRB |= (1<<MUX5);
         line_ir_state = ADC9;
         break;
         
         case ADC9: // second Leftmost sensor
-        line_sensor_array[2] = temp_adc;
+        // line_sensor_array[2] = temp_adc;
         CLEAR_MUX;
         ADCSRB |= (1<<MUX5);
         line_ir_state = ADC8;
@@ -599,10 +622,9 @@ ISR(ADC_vect){
         case ADC8: // Leftmost sensor
         // line_sensor_array[4] = temp_adc;
         CLEAR_MUX;
-        SET_MUX(IRC1_MUX);
         ADCSRB &= ~(1<<MUX5);
         line_ir_state = ADC4;
-        colour_ir_state = ADC1;
+        colour_ir_state = ADC0;
         adc_state = COLOUR_SENSING;
         break;
 
@@ -640,7 +662,7 @@ ISR(ADC_vect){
           }        
           colour_sensor_array[1] = temp_adc;
           CLEAR_MUX;
-          SET_MUX(IR2_MUX); // change
+          SET_MUX(IR1_MUX); // change
           line_ir_state = ADC4;
           colour_ir_state = ADC1;
           adc_state = LINE_SENSING;

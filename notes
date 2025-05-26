@@ -6,14 +6,14 @@ teensy side - PB1
 
 
 Line Sensor Array
-S1 PF4 ADC4
-S2 PF5 ADC5
-S3 PF6 ADC6
-S4 PF7 ADC7
-S5 PB4 ADC11 
-S6 PD7 ADC10
-S7 PD6 ADC9
-S8 PD4 ADC8
+S1 PF4 ADC4 	LL 	0
+S2 PF5 ADC5		L   1
+S3 PF6 ADC6 	S
+S4 PF7 ADC10 	S
+S5 PB4 ADC7 	MR  3
+S6 PD7 ADC11	RR  5
+S7 PD6 ADC9		ML  2
+S8 PD4 ADC8		R   4
 
 
 
@@ -34,3 +34,15 @@ Not Working
 - color detecting
 - object pushing detection
 --------------------------------
+
+
+State Machine
+
+STRAIGHT
+if going straight, green led on
+if going into turn, green led off
+if detect red, turn on turret, slow down
+
+TURNING
+if turning, green led off
+if detect corner signal, go to straight, turn green led on

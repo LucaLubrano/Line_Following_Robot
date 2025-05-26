@@ -52,6 +52,22 @@
 
 #define ANGLE_CONV (90.0/255.0)
 
+// Send signal to main
+#define TURRET_INPUT_DDR DDRB 
+#define TURRET_INPUT_PORT PORTB
+#define TURRET_INPUT_PIN PIN1
+
+// Recieve signal from main
+#define TURRET_OUTPUT_DDR DDRB
+#define TURRET_OUTPUT_PORT PORTB
+#define TURRET_OUTPUT_PIN PIN0
+
+// Check if recieve signal from main
+#define SEND_SIGNAL_TO_MAIN SETBIT(TURRET_INPUT_PORT, TURRET_INPUT_PIN)
+#define STOP_SIGNAL_TO_MAIN CLRBIT(TURRET_INPUT_PORT, TURRET_INPUT_PIN)
+#define CHECK_SIGNAL_RECEIVE (TURRET_OUTPUT_PORT & TURRET_OUTPUT_PIN)
+
+#define CURRENTLY_TRACKING 0
 ////////////////////////////////////////////////
 // Type Definitions
 ////////////////////////////////////////////////
@@ -64,9 +80,9 @@ typedef enum {
 } IR_STATE_TYPE;
 
 typedef enum {
-  IDLE,
+  OFF,
+  ON,
   TRACKING,
-  HORIZ_LINE,
 } IFR_STATE;
 
 ////////////////////////////////////////////////
@@ -116,6 +132,7 @@ volatile int Hsensor_array[2] = {0,0};
 // index 1 - UP (+)
 volatile int Vsensor_array[2] = {0,0};
 volatile IR_STATE_TYPE ir_state = ADC4;
+volatile IFR_STATE turret_state = OFF;
 
 ////////////////////////////////////////////////
 // Main
@@ -169,14 +186,49 @@ void loop(){
 // Control System and State Machines
 ////////////////////////////////////////////////
 
+void turret_state_machine(void){
+  switch(turret_state){
+    case OFF: 
+      if(CHECK_SIGNAL_RECEIVE){
+        turret_state = ON;
+        PID_calc();
+        turn_calc();
+      }
+    break;
+
+    case ON:
+      PID_calc();
+      turn_calc();
+
+      if(CURRENTLY_TRACKING){
+        turret_state = TRACKING;
+        SEND_SIGNAL_TO_MAIN;
+      } 
+      if(~CHECK_SIGNAL_RECEIVE){
+        turret_state = OFF;
+        STOP_SIGNAL_TO_MAIN;
+      }
+
+    break;
+
+    case TRACKING:
+      PID_calc();
+      turn_calc();
+
+      if(~CURRENTLY_TRACKING){
+        turret_state = ON;
+        STOP_SIGNAL_TO_MAIN;
+      } 
+      if(~CHECK_SIGNAL_RECEIVE){
+        turret_state = OFF;
+        STOP_SIGNAL_TO_MAIN;
+      }
+    break;
+  }
+}
+
 void PID_calc(void){
   /* Sensor Conversions */
-  // Sensor Array
-  // Hsensor_array[0] = sensor_array[3]; // LEFT (-)
-  // Hsensor_array[1] = sensor_array[2]; // RIGHT (+)
-  // Vsensor_array[0] = sensor_array[1]; // DOWN (-)
-  // Vsensor_array[1] = sensor_array[0]; // UP (+)
-
   Hsensor_array[1] = sensor_array[3]; // LEFT (-)
   Hsensor_array[0] = sensor_array[2]; // RIGHT (+)
   Vsensor_array[0] = sensor_array[1]; // DOWN (-)
