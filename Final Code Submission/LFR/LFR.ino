@@ -93,38 +93,23 @@
 // use I 
 
 /* Light Setup */
-#define STOP_LED_DDR DDRB
+#define STOP_LED_DDR DDRE
 #define STRAIGHT_LED_DDR DDRB
-#define OBSTACLE_LED_DDR DDRD
-#define TURRET_ON_DDR DDRD
+#define OBSTACLE_LED_DDR DDRB
+#define TURRET_ON_DDR DDRB
 #define TURRET_TRACKING_DDR DDRD
 
-#define STOP_LED_PORT PORTB
+#define STOP_LED_PORT PORTE
 #define STRAIGHT_LED_PORT PORTB
-#define OBSTACLE_LED_PORT PORTD
-#define TURRET_ON_PORT PORTD
+#define OBSTACLE_LED_PORT PORTB
+#define TURRET_ON_PORT PORTB
 #define TURRET_TRACKING_PORT PORTD
 
-#define STOP_LED_PIN PIN3
-#define STRAIGHT_LED_PIN PIN7
-#define OBSTACLE_LED_PIN PIN0
-#define TURRET_ON_PIN PIN1
-#define TURRET_TRACKING_PIN PIN2
-
-// Recieve signal from turret
-#define TURRET_INPUT_DDR DDRB
-#define TURRET_INPUT_PORT PORTB
-#define TURRET_INPUT_PIN PIN5
-
-// Send signal to turret
-#define TURRET_OUTPUT_DDR DDRB
-#define TURRET_OUTPUT_PORT PORTB
-#define TURRET_OUTPUT_PIN PIN6
-
-// 
-#define SEND_SIGNAL_TO_TURRET SETBIT(TURRET_OUTPUT_PORT, TURRET_OUTPUT_PIN)
-#define STOP_SIGNAL_TO_TURRET CLRBIT(TURRET_OUTPUT_PORT, TURRET_OUTPUT_PIN)
-#define CHECK_SIGNAL_RECEIVE (TURRET_INPUT_PORT & TURRET_INPUT_PIN)
+#define STOP_LED_PIN PIN6
+#define STRAIGHT_LED_PIN PIN0
+#define OBSTACLE_LED_PIN PIN1
+#define TURRET_ON_PIN PIN7
+#define TURRET_TRACKING_PIN PIN0
 
 ////////////////////////////////////////////////
 // Type Definitions
@@ -233,7 +218,7 @@ volatile bool slow_zone = false;
 volatile int prev_sensor1 = 0;
 volatile int prev_sensor2 = 0;
 // volatile int current_corner_sensor = 0;
-
+volatile bool signal_from_turret = false;
 
 ////////////////////////////////////////////////
 // Main
@@ -245,11 +230,11 @@ void setup() {
   // Initialisation
   ADC_init();
   MOTOR_PWM_init();
-  COMMS_init();
+  // COMMS_init();
   LED_init();
   // Reset interupts after initialisation
   sei();
-  Serial.begin(9600);
+  Serial1.begin(9600);
   // Serial.begin(9600);
 }
 
@@ -292,10 +277,8 @@ void robot_state_machine(void){
 
   switch(bot_state){
     case IDLE:
-      if(PB_PRESSED){
-        SET1_LED(STRAIGHT_LED_PORT, STRAIGHT_LED_PIN);
-        bot_state = STRAIGHT;
-      }
+      SET1_LED(STRAIGHT_LED_PORT, STRAIGHT_LED_PIN);
+      bot_state = STRAIGHT;
     break;
     
     case STRAIGHT:
@@ -306,7 +289,7 @@ void robot_state_machine(void){
         bot_state = TURNING;
       }
       if(DETECT_RED(0)){
-        SEND_SIGNAL_TO_TURRET;
+        Serial1.println('1');
         SET2_LED(STRAIGHT_LED_PORT, STRAIGHT_LED_PIN, TURRET_ON_PORT, TURRET_ON_PIN);
         bot_state = SLOW_ZONE_STRAIGHT;
         set_motors(SLOW_ZONE_MTR_SPEED, SLOW_ZONE_MTR_SPEED);
@@ -321,7 +304,7 @@ void robot_state_machine(void){
         bot_state = STRAIGHT;
       }
       if(DETECT_RED(0)){
-        SEND_SIGNAL_TO_TURRET;
+        Serial1.println('1');
         SET1_LED(TURRET_ON_PORT, TURRET_ON_PIN);
         bot_state = SLOW_ZONE_TURNING;
         set_motors(SLOW_ZONE_MTR_SPEED, SLOW_ZONE_MTR_SPEED);
@@ -332,15 +315,17 @@ void robot_state_machine(void){
       PID_calc();
       turn_calc();
 
+      signal_from_turret = check_input_signal();
+
       if(DETECT_TURNING_MARKER){
-        if(CHECK_SIGNAL_RECEIVE){
+        if(signal_from_turret){
           SET2_LED(TURRET_ON_PORT, TURRET_ON_PIN, TURRET_TRACKING_PORT, TURRET_TRACKING_PIN);
         } else{
           SET1_LED(TURRET_ON_PORT, TURRET_ON_PIN);
         }
         bot_state = SLOW_ZONE_TURNING;
       } else if(DETECT_GREEN(0)){
-        STOP_SIGNAL_TO_TURRET;
+        Serial1.println('0');
         bot_state = STRAIGHT;
         SET1_LED(STRAIGHT_LED_PORT, STRAIGHT_LED_PIN);
         set_motors(SPEED_LIMIT, SPEED_LIMIT);
@@ -350,7 +335,7 @@ void robot_state_machine(void){
         set_motors(OBSTACLE_SPEED, OBSTACLE_SPEED);
         SET4_LED(STRAIGHT_LED_PORT, STRAIGHT_LED_PIN, TURRET_ON_PORT, TURRET_ON_PIN, TURRET_TRACKING_PORT, TURRET_TRACKING_PIN, OBSTACLE_LED_PORT, OBSTACLE_LED_PIN);
       } else {
-        if(CHECK_SIGNAL_RECEIVE){
+        if(signal_from_turret){
           SET3_LED(STRAIGHT_LED_PORT, STRAIGHT_LED_PIN, TURRET_ON_PORT, TURRET_ON_PIN, TURRET_TRACKING_PORT, TURRET_TRACKING_PIN);
         } else {
           SET2_LED(STRAIGHT_LED_PORT, STRAIGHT_LED_PIN, TURRET_TRACKING_PORT, TURRET_TRACKING_PIN);
@@ -362,15 +347,17 @@ void robot_state_machine(void){
       PID_calc();
       turn_calc();
 
+      signal_from_turret = check_input_signal();
+
       if(DETECT_TURNING_MARKER){
-        if(CHECK_SIGNAL_RECEIVE){
+        if(signal_from_turret){
           SET3_LED(STRAIGHT_LED_PORT, STRAIGHT_LED_PIN, TURRET_ON_PORT, TURRET_ON_PIN, TURRET_TRACKING_PORT, TURRET_TRACKING_PIN);
         } else{
           SET2_LED(STRAIGHT_LED_PORT, STRAIGHT_LED_PIN, TURRET_ON_PORT, TURRET_ON_PIN);
         }
         bot_state = SLOW_ZONE_STRAIGHT;
       } else if(DETECT_GREEN(0)){
-        STOP_SIGNAL_TO_TURRET;
+        Serial1.println('0');
         bot_state = TURNING;
         CLEAR_LEDS();
         set_motors(SPEED_LIMIT, SPEED_LIMIT);
@@ -416,21 +403,21 @@ void PID_calc(void){
 }
 
 void turn_calc(void){
-//   r_mtr_speed = basespeed + correction;
-//   l_mtr_speed = basespeed - correction;
+  //   r_mtr_speed = basespeed + correction;
+  //   l_mtr_speed = basespeed - correction;
 
-// if (r_mtr_speed > maxspeed){
-//     r_mtr_speed = maxspeed;
-//   } else if (r_mtr_speed < 0) {
-//     r_mtr_speed = 0;
-//   }
+  // if (r_mtr_speed > maxspeed){
+  //     r_mtr_speed = maxspeed;
+  //   } else if (r_mtr_speed < 0) {
+  //     r_mtr_speed = 0;
+  //   }
 
-//   if (l_mtr_speed > maxspeed) {
-//     l_mtr_speed = maxspeed;
-//   } else if (l_mtr_speed < 0){
-//     l_mtr_speed = 0;
-//   }
-//   set_motors(l_mtr_speed, r_mtr_speed);
+  //   if (l_mtr_speed > maxspeed) {
+  //     l_mtr_speed = maxspeed;
+  //   } else if (l_mtr_speed < 0){
+  //     l_mtr_speed = 0;
+  //   }
+  //   set_motors(l_mtr_speed, r_mtr_speed);
 
   currentspeedR += correction;
   currentspeedL -= correction;
@@ -493,7 +480,7 @@ void COMMS_init(void){
   CLRBIT(TURRET_OUTPUT_PORT, TURRET_OUTPUT_PIN); // Set to low
 }
 void MOTOR_PWM_init(void){
-// Set pins b7 and d0 to output to expose pwm signal to pin
+  // Set pins b7 and d0 to output to expose pwm signal to pin
   SETBIT(DDRB, PB7);
   SETBIT(DDRD, PD0);
   
@@ -554,7 +541,17 @@ int detect_rising_edge(int current_sensor1, int current_sensor2){
   rising_edge = (val_changed & current_sensor1) | (val_changed & current_sensor2);
   return rising_edge;
 } 
-
+bool check_input_signal(void){
+    if (Serial1.available() >= 0) {
+      char receivedData = Serial1.read();   // read one byte from serial buffer and save to receivedData
+      if (receivedData == '1') {
+        return true;
+      }
+      else if (receivedData == '0') {
+        return false;
+      }
+  }
+}
 ////////////////////////////////////////////////
 // Interupt Service Routines
 ////////////////////////////////////////////////
