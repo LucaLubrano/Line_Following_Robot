@@ -1,0 +1,104 @@
+Fire Fighting Robot Project
+
+### Questions ###
+- Would an autonomous firefighting robot be useful for the Quandamooka Rangers?
+
+
+
+- What sort of fires would it be useful for it to fight? Some restrictions could be that it shouldnt fire small fires, or controlled 
+fires. 
+
+
+
+- Should it have a system that the rangers can use to reroute it during back burning operations
+
+
+
+- What are some markers that indicate the undergrowth should be back burnt?
+
+
+
+- Would it be useful for the robot to use computer vision to try and detect invasive species?
+
+
+
+- If it were to use computer vision, are there any limitation that 
+should be imposed as to not interfere with heritage sites
+
+
+
+- What kind of communication to the rangers would be useful? Should it send a report at the end of each route
+
+
+
+- What areas of Minjerribah would be most useful to patrol? 
+
+
+
+- What kind of terrain should the robot be built to handle, would it be useful for it to be able to go into areas not easily accessible to rangers
+
+
+
+- How could it best compilment the rangers during back burning operations? Would it be useful if it patrolled an area that could be designated by the rangers and have the robot attempt to contain the fire within 
+
+
+
+### Notes ###
+
+The ability to assist in moppig up 
+
+Issue with the amount of water and how much it can carry 
+
+Go through a track to areas that are significantly important
+
+Go into areas that are too risky for people
+
+Swamps 
+- went on fire more during before colonisation
+- after colonisation it has burnt less
+
+Be able to light small back burn fires and then put them out
+
+The ability to light back burn fires in areas that are too dangerous for people to get in
+
+Incindiares 
+
+Work from the top of ridges down 
+
+Swamp style environment
+
+How can it deliver burning bombs to swamp areas
+
+Generate a report that can be sent to rangers
+
+spot overs, need to be able to be seen quickly 
+
+Work on fire tracks to monitor fire spread 4WD
+
+Mapping where burn lines are, along the back of a back burn area and follow it around 
+
+Have a method for it to be able to be seen easily by rangers
+
+GPS tracking so that the fire rangers can determine the path of the fire 
+
+Being able to send a burn plan to the robot 
+
+integratting with fire maps and nogo zones
+
+robustness is super important 
+
+issues with satellite communications, 
+
+Use it on walking tracks would be ideal for it to patrol, how to get around stairs 
+
+Tracked option would be better instead of wheeled, perhaps be able to have it swap out between tracked and 
+
+Fire ants, weed identification - mapping, send a report out to rangers with locations
+
+Fire ant would be very useful to the rangers - using thermals and gps it 
+
+Looking at fuel roads and assessments to be able to send through fuel loadings to the rangers 
+
+Topology mapping of the terrain to help with burn planning and track opening 
+
+Being able to get firmware updates through 
