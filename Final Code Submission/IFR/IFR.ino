@@ -65,8 +65,7 @@ typedef enum {
 
 typedef enum {
   IDLE,
-  TRACKING,
-  HORIZ_LINE,
+  ON,
 } IFR_STATE;
 
 ////////////////////////////////////////////////
@@ -103,6 +102,8 @@ volatile int temp_adc;
 volatile int H_motor_angle, V_motor_angle;
 volatile int baseangle = 90;
 
+volatile bool detect_signal = false;
+
 // Sensor Array 
 // index 0 - TOP LEFT IR SENSOR
 // index 1 - TOP RIGHT IR SENSOR
@@ -116,7 +117,8 @@ volatile int Hsensor_array[2] = {0,0};
 // index 1 - UP (+)
 volatile int Vsensor_array[2] = {0,0};
 volatile IR_STATE_TYPE ir_state = ADC4;
-
+volatile IFR_STATE robot_state = IDLE;
+int incomingByte = 0;
 ////////////////////////////////////////////////
 // Main
 ////////////////////////////////////////////////
@@ -129,24 +131,26 @@ void setup(){
   
   sei();
   Serial.begin(9600);
+  Serial1.begin(9600);
   OCR1A = ((0.5/20.0) + ((90/180.0) * (2))/20.0) * ICR1;
   OCR1B = ((0.5/20.0) + ((90/180.0) * (2))/20.0) * ICR1;
   delay(500); 
 }
 void loop(){
-  PID_calc();
-  turn_calc();
-  Serial.println("Sensor Readings");
-  Serial.println("---------------");
-  Serial.print("Top Sensor ==> ");
-  Serial.println(sensor_array[0]);
-  Serial.print("Bottom Sensor ==> ");
-  Serial.println(sensor_array[1]);
-  Serial.print("Right Sensor ==> ");
-  Serial.println(sensor_array[2]);
-  Serial.print("Left Sensor ==> ");
-  Serial.println(sensor_array[3]);
-  Serial.println("---------------");
+  // PID_calc();
+  // turn_calc();
+  robot_state_machine();
+  // Serial.println("Sensor Readings");
+  // Serial.println("---------------");
+  // Serial.print("Top Sensor ==> ");
+  // Serial.println(sensor_array[0]);
+  // Serial.print("Bottom Sensor ==> ");
+  // Serial.println(sensor_array[1]);
+  // Serial.print("Right Sensor ==> ");
+  // Serial.println(sensor_array[2]);
+  // Serial.print("Left Sensor ==> ");
+  // Serial.println(sensor_array[3]);
+  // Serial.println("---------------");
   // Serial.println("Logic Control");
   // Serial.println("---------------");
   // Serial.print("Horizontal Correction Angle ==> ");
@@ -168,6 +172,50 @@ void loop(){
 ////////////////////////////////////////////////
 // Control System and State Machines
 ////////////////////////////////////////////////
+
+void robot_state_machine(void){
+  // while (Serial1.available() >= 0) {
+  //   char receivedData = Serial1.read();   // read one byte from serial buffer and save to receivedData
+  //   if (receivedData == '1') {
+  //     detect_signal = true;
+  //   }
+  //   else if (receivedData == '0') {
+  //     detect_signal = false;
+  //   }
+  // }
+  if (Serial.available() >= 0) {
+    char receivedData = Serial.read();   // read one byte from serial buffer and save to receivedData
+    if (receivedData == '1') {
+      detect_signal = true;
+      // SET_SERVO_H(90);
+      // SET_SERVO_V(90);
+      Serial.println("DETECTED INPUT");
+    }
+    else if (receivedData == '0') {
+      detect_signal = false;
+      // SET_SERVO_H(120);
+      // SET_SERVO_V(120);
+      Serial.println("DETECTED INPUT");
+    }
+  }
+  switch(robot_state){
+    case IDLE:
+      SET_SERVO_H(90);
+      SET_SERVO_V(90);
+      if(detect_signal){
+        robot_state = ON;
+      }
+    break;
+
+    case ON:
+      PID_calc();
+      turn_calc();
+      if (!detect_signal){
+        robot_state = IDLE;
+      }
+    break;
+  }
+}
 
 void PID_calc(void){
   /* Sensor Conversions */
@@ -196,7 +244,7 @@ void PID_calc(void){
 
   /* Vertical Correction Calculations */
   Verror = ANGLE_CONV * (Vsensor_array[1]-Vsensor_array[0])/2;
-  if ((Verror <= 23) && (Verror >= -2)){
+  if ((Verror <= 2) && (Verror >= -2)){
     Verror = 0;
   }
   VP = Verror;  
@@ -205,7 +253,6 @@ void PID_calc(void){
   VLP = VP;
   Vcorrection = (Kp*VP + Ki*VI + Kd*VD);
 }
-
 void turn_calc(void){
   demand_angle_H = current_angle_H + Hcorrection;
   demand_angle_V = current_angle_V + Vcorrection;
@@ -235,12 +282,10 @@ void turn_calc(void){
     dec_servo_V();
   }
 }
-
 void inc_servo_H(void){
   current_angle_H += 2;
   SET_SERVO_H(current_angle_H);
 }
-
 void inc_servo_V(void){
   current_angle_V += 2;
   SET_SERVO_V(current_angle_V);
@@ -249,7 +294,6 @@ void dec_servo_H(void){
   current_angle_H -= 2;
   SET_SERVO_H(current_angle_H);
 }
-
 void dec_servo_V(void){
   current_angle_V -= 2;
   SET_SERVO_V(current_angle_V);
@@ -269,7 +313,6 @@ void SERVO_PWM_init(void){
   OCR1A = ((0.5/20.0) + ((90/180.0) * (2))/20.0) * ICR1;
   OCR1B = ((0.5/20.0) + ((90/180.0) * (2))/20.0) * ICR1;
 }
-
 void ADC_init(void){
   // Set up ADC
   ADMUX |= (1<<REFS0) | (1<<ADLAR);
@@ -282,7 +325,6 @@ void ADC_init(void){
   // Start ADC
   ADCSRA |= (1<<ADSC);  
 }
-
 ////////////////////////////////////////////////
 // Interupt Service Routines
 ////////////////////////////////////////////////
