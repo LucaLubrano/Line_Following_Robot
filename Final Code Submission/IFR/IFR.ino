@@ -203,7 +203,7 @@ void robot_state_machine(void){
       SET_SERVO_H(90);
       SET_SERVO_V(90);
       if(detect_signal){
-        robot_state = ON;
+        robot_state = O;
       }
     break;
 
